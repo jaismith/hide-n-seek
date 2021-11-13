@@ -8,7 +8,7 @@ import math
 import rospy
 import tf
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
-from geometry_msgs.msg import Twist, Pose, Point
+from geometry_msgs.msg import Twist, Pose, Point, PoseStamped
 from nav_msgs.msg import Path
 from hide_n_seek.msg import MotionStatus
 from enum import Enum
@@ -49,20 +49,20 @@ class Motion:
 
   def __init__(self, linear_vel=LINEAR_VEL, angular_vel=ANGULAR_VEL,
       cmd_vel_topic=CMD_VEL_TOPIC, status_topic=STATUS_TOPIC,
-      path_topic=PATH_TOPIC, lookup_should_timeout=True):
+      path_topic=PATH_TOPIC, lookup_should_timeout=True, freq=FREQ):
     """ Constructor """
 
     self._linear_vel = linear_vel
     self._angular_vel = angular_vel
 
     self._listener = tf.TransformListener()
-    self._rate = rospy.Rate(FREQ)
+    self._rate = rospy.Rate(freq)
 
     self._cmd_pub = rospy.Publisher(cmd_vel_topic, Twist, queue_size=10)
     self._status_pub = rospy.Publisher(status_topic, MotionStatus,
       queue_size=10)
 
-    self._path_sub = rospy.Subscriber(path_topic, Pose, self._path_callback)
+    self._path_sub = rospy.Subscriber(path_topic, Path, self._path_callback)
 
     self._lookup_should_timeout = lookup_should_timeout
     self._state = fsm.WAIT
@@ -73,8 +73,7 @@ class Motion:
     """ Callback for the path topic, this overrides the current queue """
 
     rospy.loginfo('Received new path of length {}'.format(len(msg.poses)))
-    poses = (poses.append(pose_stamped.pose) for pose_stamped in msg.poses)
-    self._queue = list(poses)
+    self._queue = list(pose_stamped.pose for pose_stamped in msg.poses)
 
   def get_position(self):
     """ Get the current position of the robot, based on odometry """
@@ -162,16 +161,12 @@ class Motion:
         rospy.loginfo('Calculating move\n\tto {} {} {}\n\tfrom {} {} {}'
           .format(x, y, w, x_cur, y_cur, w_cur))
 
-        # calculate offset
+        # calculate offsets
         dx = x - x_cur
         dy = y - y_cur
 
-        rospy.loginfo('Calculated offset: {} {}'.format(dx, dy))
-
         yaw = math.atan2(dy, dx)
         theta = Motion.optimize_theta(yaw - w_cur)
-
-        rospy.loginfo('Calculated angle: {}'.format(theta))
 
         dist = math.sqrt((dx ** 2) + (dy ** 2))
         theta2 = Motion.optimize_theta(w - yaw)
@@ -199,8 +194,6 @@ class Motion:
         self._state = fsm.WAIT
 
       if self._state == fsm.ROTATE:
-        rospy.loginfo('Rotating')
-
         # rotate
         self.move(0, self._angular_vel * direction)
 
@@ -210,8 +203,6 @@ class Motion:
           self._state = fsm.WAIT
 
       if self._state == fsm.FORWARD:
-        rospy.loginfo('Moving forward')
-
         # move forward
         self.move(self._linear_vel * direction, 0)
 
@@ -221,8 +212,6 @@ class Motion:
           self._state = fsm.WAIT
 
       if self._state == fsm.WAIT:
-        rospy.loginfo('Checking for pending actions...')
-
         # if pending action, execute
         if len(pending) > 0:
           [self._state, duration, direction] = pending.pop(0)
@@ -264,20 +253,33 @@ if __name__ == '__main__':
 
   # queue commands to move in a square
   def pose_from_xyw(x, y, w):
-    pose = Pose()
-    pose.position.x = x
-    pose.position.y = y
+    pose_stamped = PoseStamped()
+    pose_stamped.header.seq = 0
+    pose_stamped.header.stamp = rospy.Time.now()
+    pose_stamped.header.frame_id = FIXED_FRAME
+    pose_stamped.pose.position.x = x
+    pose_stamped.pose.position.y = y
     orientation = quaternion_from_euler(0, 0, w)
-    pose.orientation.x = orientation[0]
-    pose.orientation.y = orientation[1]
-    pose.orientation.z = orientation[2]
-    pose.orientation.w = orientation[3]
-    return pose
+    pose_stamped.pose.orientation.x = orientation[0]
+    pose_stamped.pose.orientation.y = orientation[1]
+    pose_stamped.pose.orientation.z = orientation[2]
+    pose_stamped.pose.orientation.w = orientation[3]
+    return pose_stamped
 
-  motion.move_to(pose_from_xyw(1, 0, math.pi / 2))
-  motion.move_to(pose_from_xyw(1, 1, math.pi))
-  motion.move_to(pose_from_xyw(0, 1, (math.pi * 3) / 2))
-  motion.move_to(pose_from_xyw(0, 0, 0))
+  path = Path()
+  path.header.seq = 0
+  path.header.stamp = rospy.Time.now()
+  path.header.frame_id = FIXED_FRAME
+  path.poses.append(pose_from_xyw(1, 0, math.pi / 2))
+  path.poses.append(pose_from_xyw(1, 1, math.pi))
+  path.poses.append(pose_from_xyw(0, 1, (math.pi * 3) / 2))
+  path.poses.append(pose_from_xyw(0, 0, 0))
+
+  # publish path
+  path_pub = rospy.Publisher('navigation_path', Path, queue_size=10)
+  for i in range(100):
+    path_pub.publish(path)
+    rospy.sleep(0.05)
 
   # run node
   motion.run()
