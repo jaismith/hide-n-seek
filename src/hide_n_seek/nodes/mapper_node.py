@@ -262,8 +262,6 @@ class Mapper:
             odom_T_bl, bl_T_bll = self.get_transformations(stamp - duration / 2)
             origin = odom_T_bl.dot(bl_T_bll.dot(np.array([0, 0, 0, 1]).T))[:2]
 
-            # TODO: implement odom correction
-
             # generate the sets of all cells, occupied cells, and seen cells by iterating
             # over the range measurements using raytracing to determine which cells intersect
             all_cells = set()
