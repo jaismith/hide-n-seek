@@ -1,0 +1,13 @@
+<package>
+  <description brief="mapper">
+
+     mapper
+
+  </description>
+  <author>root</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/mapper</url>
+  <depend package="rospy"/>
+
+</package>
