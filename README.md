@@ -16,3 +16,10 @@ Automated Object of Interest Detection, Mapping, Localization, and Obstacle Avoi
 ### Object Detection
 - input: raw RGB image
 - output: bounding box around object
+
+## Launch
+
+```sh
+catkin_make
+rosrun hide_n_seek <node_name>.py
+```
