@@ -7,9 +7,9 @@
 import math
 import rospy
 import tf
-from tf.transformations import euler_from_quaternion
-from geometry_msgs.msg import Twist
-from motion.msg import MotionStatus
+from tf.transformations import euler_from_quaternion, quaternion_from_euler
+from geometry_msgs.msg import Twist, Pose
+from hide_n_seek.msg import MotionStatus
 from enum import Enum
 
 # * constants
@@ -19,7 +19,7 @@ ODOM_TOPIC = 'odom'
 STATUS_TOPIC = 'motion_status'
 
 # frames
-ODOM_FRAME = 'odom'
+FIXED_FRAME = 'odom'
 BASE_LINK_FRAME = 'base_link'
 
 # runtime
@@ -56,10 +56,11 @@ class Motion:
     self._rate = rospy.Rate(FREQ)
 
     self._cmd_pub = rospy.Publisher(CMD_VEL_TOPIC, Twist, queue_size=10)
-    self._status_pub = rospy.Publisher(STATUS_TOPIC, String, queue_size=10)
+    self._status_pub = rospy.Publisher(STATUS_TOPIC, MotionStatus, queue_size=10)
 
     self._state = fsm.WAIT
     self._queue = []
+    self._goal = None
 
   def get_position(self):
     """ Get the current position of the robot, based on odometry """
@@ -71,7 +72,7 @@ class Motion:
       try:
         rospy.loginfo('Getting base link transform...')
         translation, rotation = self._listener.lookupTransform(
-          ODOM_FRAME, BASE_LINK_FRAME, rospy.Time(0)
+          FIXED_FRAME, BASE_LINK_FRAME, rospy.Time(0)
         )
       except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as err:
         err_count += 1
@@ -79,7 +80,7 @@ class Motion:
         if err_count > 50:
           rospy.logerr('Error looking up transform: {}'.format(str(err)))
           raise err
-        
+
         self._rate.sleep()
         continue
 
@@ -124,6 +125,7 @@ class Motion:
   def run(self):
     """ Run the node """
 
+    seq = 0
     pending = []
     duration = None
     direction = None
@@ -135,7 +137,13 @@ class Motion:
         # get goal
         x, y, w = self._queue.pop(0)
 
-        # get pose
+        # generate pose msg from goal
+        self._goal = Pose()
+        self._goal.position.x = x
+        self._goal.position.y = y
+        self._goal.orientation = quaternion_from_euler(0, 0, w)
+
+        # get robot pose
         x_cur, y_cur, w_cur = self.get_position()
 
         rospy.loginfo('Calculating move\n\tto {} {} {}\n\tfrom {} {} {}'
@@ -217,6 +225,16 @@ class Motion:
         if self._state == fsm.WAIT:
           self.stop()
 
+      # publish status
+      motion_status_msg = MotionStatus()
+      motion_status_msg.header.seq = seq
+      motion_status_msg.header.stamp = rospy.Time.now()
+      motion_status_msg.header.frame_id = FIXED_FRAME
+      motion_status_msg.goal = self._goal
+      motion_status_msg.state = self._state
+      self._status_pub.publish(motion_status_msg)
+
+      seq += 1
       self._rate.sleep()
 
 if __name__ == '__main__':

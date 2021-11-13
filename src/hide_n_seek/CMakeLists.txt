@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(motion)
+project(hide_n_seek)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -108,7 +108,7 @@ generate_messages(
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES motion
+#  LIBRARIES hide_n_seek
   CATKIN_DEPENDS message_runtime
 #  DEPENDS system_lib
 )
@@ -126,7 +126,7 @@ include_directories(
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/motion.cpp
+#   src/${PROJECT_NAME}/hide_n_seek.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -201,7 +201,7 @@ include_directories(
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_motion.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_hide_n_seek.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
