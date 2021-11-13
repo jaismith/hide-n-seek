@@ -15,6 +15,7 @@ from enum import Enum
 # topics
 CMD_VEL_TOPIC = 'cmd_vel'
 ODOM_TOPIC = 'odom'
+STATUS_TOPIC = 'motion_status'
 
 # frames
 ODOM_FRAME = 'odom'
@@ -54,6 +55,7 @@ class Motion:
     self._rate = rospy.Rate(FREQ)
 
     self._cmd_pub = rospy.Publisher(CMD_VEL_TOPIC, Twist, queue_size=10)
+    self._status_pub = rospy.Publisher(STATUS_TOPIC, String, queue_size=10)
 
     self._state = fsm.WAIT
     self._queue = []
