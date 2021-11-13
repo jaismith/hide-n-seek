@@ -54,3 +54,5 @@ src/CMakeLists.txt
 
 # mac os
 .DS_Store
+
+data
