@@ -9,6 +9,7 @@ import rospy
 import tf
 from tf.transformations import euler_from_quaternion
 from geometry_msgs.msg import Twist
+from motion.msg import MotionStatus
 from enum import Enum
 
 # * constants
