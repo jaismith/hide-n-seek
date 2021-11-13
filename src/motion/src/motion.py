@@ -9,12 +9,14 @@ import rospy
 import tf
 from tf.transformations import euler_from_quaternion
 from geometry_msgs.msg import Twist
+from motion.msg import MotionStatus
 from enum import Enum
 
 # * constants
 # topics
 CMD_VEL_TOPIC = 'cmd_vel'
 ODOM_TOPIC = 'odom'
+STATUS_TOPIC = 'motion_status'
 
 # frames
 ODOM_FRAME = 'odom'
@@ -54,6 +56,7 @@ class Motion:
     self._rate = rospy.Rate(FREQ)
 
     self._cmd_pub = rospy.Publisher(CMD_VEL_TOPIC, Twist, queue_size=10)
+    self._status_pub = rospy.Publisher(STATUS_TOPIC, String, queue_size=10)
 
     self._state = fsm.WAIT
     self._queue = []
