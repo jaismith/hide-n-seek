@@ -51,3 +51,6 @@ qtcreator-*
 CATKIN_IGNORE
 .catkin_workspace
 src/CMakeLists.txt
+
+# mac os
+.DS_Store
