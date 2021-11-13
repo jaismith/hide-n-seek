@@ -10,8 +10,10 @@ import numpy as np
 
 # import of relevant libraries.
 import rospy # module for ROS APIs
-from geometry_msgs.msg import PolygonStamped, Point32 # message type for cmd_vel
-from nav_msgs.msg import OccupancyGrid
+from tf.transformations import euler_from_quaternion, quaternion_from_euler, quaternion_matrix, translation_matrix
+from geometry_msgs.msg import PolygonStamped, Point32, PoseStamped # message type for cmd_vel
+from nav_msgs.msg import OccupancyGrid, Path
+# from motion_msgs.msg import MotionState
 
 
 
@@ -20,7 +22,7 @@ from nav_msgs.msg import OccupancyGrid
 # assuming both maps have same params, and target object will be marked with a special value on seen map
 MAP_TOPIC = 'map' # name of topic for calculated occupancy grid
 SEEN_MAP_TOPIC = 'seen'  # name of topic for the seen map
-NEXT_POINT_TOPIC = 'next'   # current goal point published by movement node
+MOTION_TOPIC = 'motion'   # current goal point published by movement node
 NAVIGATION_TOPIC = 'navigation' # topic the calculated path gets published to
 FRAME_ID = 'odom'   # the static reference frame
 # Frequency at which the loop operates
@@ -37,11 +39,11 @@ class Navigation():
 
         # # Setting up publishers/subscribers.
         # Setting up the publishers.
-        self._navigation_pub = rospy.Publisher(NAVIGATION_TOPIC, PolygonStamped, queue_size=1)
+        self._navigation_pub = rospy.Publisher(NAVIGATION_TOPIC, Path, queue_size=1)
         # Setting up subscribers.
         self._map_sub = rospy.Subscriber(MAP_TOPIC, OccupancyGrid, self._map_callback, queue_size=1)
         self._seen_map_sub = rospy.Subscriber(SEEN_MAP_TOPIC, OccupancyGrid, self._seen_map_callback, queue_size=1)
-        self._next_point_sub = rospy.Subscriber(NEXT_POINT_TOPIC, Point32, self._next_point_callback, queue_size=1)
+        # self._motion_sub = rospy.Subscriber(MOTION_TOPIC, MotionState, self._next_point_callback, queue_size=1)
 
         # Parameters.
         self.min_threshold_distance = min_threshold_distance
@@ -50,10 +52,14 @@ class Navigation():
         self._map_resolution = None
         self._seen = None
         self._pos = None    # current position of the robot
+        self._yaw = None
 
-    def _next_point_callback(self, msg):
+    def _motion_callback(self, msg):
         # all points are in /odom, no need to transform
-        self._pos = (msg.x, msg.y)
+        self._pos = (msg.goal.position.x, msg.goal.position.y)
+        quat = msg.goal.position.orientation
+        self._yaw = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])[-1]
+
 
     def _seen_map_callback(self, msg):
         self._seen = msg.data
@@ -71,10 +77,13 @@ class Navigation():
             self.in_bound = lambda i, j: 0 <= i < self._map_width and 0 <= j < self._map_height
 
         # wait until having heard from both map and movement
-        if self._pos is None or self._seen is None: return []
+        # if self._pos is None or self._seen is None: return []
+        self._pos = (5, 5)
+        self._yaw = 0
 
         # # determine next target point from seen map
-        target = get_target(msg.data, self._seen, self.to_grid_id(self._pos))
+        # target = self.get_target(msg.data, self._seen, self.to_grid_id(self._pos))
+        target = (5.5, 5.5)
 
         if target is None:
             print "Naviagtion: Can't find a target"
@@ -85,13 +94,20 @@ class Navigation():
         # print path
 
         # format message using generated path
-        nav = PolygonStamped()
-        nav.header.stamp = rospy.Time.now()
-        nav.header.frame_id = FRAME_ID
-        nav.polygon = [Point32(pt[0], pt[1], 0.0) for pt in path]
+        path_msg = Path()
+        path_msg.header.frame_id = FRAME_ID
+        path_msg.header.stamp = rospy.Time.now()
+        path_msg.poses.append(to_pose(path[0], self._yaw))
+
+        for i in range(1, len(path)):
+            path_msg.poses.append(to_pose(path[i], get_yaw(path[i - 1][0], path[i - 1][1], path[i][0], path[i][1])))
+
+        # poses = [ extract_pose(pose) for pose in path_msg.poses]
+        # print poses
+
         print "Navigation: Path published."
         # publish the path to navigation
-        self._navigation_pub.publish(nav)
+        self._navigation_pub.publish(path_msg)
 
     def get_target(self, map, seen, curr_idx):
         """Return a target point from the seen map, assuming unseen cells are marked as -1."""
@@ -219,9 +235,27 @@ class Navigation():
             rate.sleep()
 
 
+def get_yaw(x, y, nx, ny):
+    dx = nx - x
+    dy = ny - y
+    return math.copysign(math.acos(dx / math.sqrt(dx ** 2 + dy ** 2)), dy)
 
+def to_pose(pt, yaw):
+    pose = PoseStamped()
+    pose.pose.position.x = pt[0]
+    pose.pose.position.y = pt[1]
+    pose.pose.position.z = 0
 
+    quaternion = quaternion_from_euler(0, 0, yaw)
+    pose.pose.orientation.x = quaternion[0]
+    pose.pose.orientation.y = quaternion[1]
+    pose.pose.orientation.z = quaternion[2]
+    pose.pose.orientation.w = quaternion[3]
+    return pose
 
+def extract_pose(pose):
+    quat = pose.pose.orientation
+    return pose.pose.position.x, pose.pose.position.y, euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])[-1]/math.pi * 180
 
 if __name__ == "__main__":
     """Main function."""
