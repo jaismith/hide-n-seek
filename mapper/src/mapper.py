@@ -2,7 +2,7 @@
 # The line above is important so that this file is interpreted with Python when running it.
 
 # Author: Zack Nathan
-# Date: Nov 11 2021
+# Date: Nov 13 2021
 
 ### imports
 
@@ -17,17 +17,17 @@ import os
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import OccupancyGrid
 
-### constants
 
-DEFAULT_SCAN_TOPIC = 'base_scan'  # for the real robot, it's just 'scan'
+# constants
+DEFAULT_SCAN_TOPIC = 'scan'  # for the simulation, it's 'base_scan'
 DEFAULT_MAP_TOPIC = 'map'
 DEFAULT_SEEN_MAP_TOPIC = 'seen_map'
 FREQUENCY = 1  # Hz
-MAP_SIZE = 256  # cells, width and height for a square map
+MAP_SIZE = 256  # cells, width and heigh t for a square map
 GRID_RESOLUTION = 0.1  # cell size, m
-LASER_FRAME = 'base_laser_link'  # for the real robot, it's just 'laser'
+LASER_FRAME = 'laser'  # for the simulation, it's 'base_laser_link'
 CAMERA_FOV = pi / 3  # horizontal field of view of the camera, 60 degrees for the ROSBot
-SCAN_ANGLE_OFFSET = 0  # pi for the ROSBot which has laser scan angles offset by pi from the simulations
+SCAN_ANGLE_OFFSET = pi  # pi for the ROSBot which has laser scan angles offset by pi from the simulations
 
 
 # static function, calculate a probability value for the occupancy grid message using a log odds value
@@ -261,8 +261,6 @@ class Mapper:
             stamp = rospy.Time(self.laser_scan.header.stamp.secs, self.laser_scan.header.stamp.nsecs)
             odom_T_bl, bl_T_bll = self.get_transformations(stamp - duration / 2)
             origin = odom_T_bl.dot(bl_T_bll.dot(np.array([0, 0, 0, 1]).T))[:2]
-
-            # TODO: implement odom correction
 
             # generate the sets of all cells, occupied cells, and seen cells by iterating
             # over the range measurements using raytracing to determine which cells intersect
