@@ -62,7 +62,7 @@ class Motion:
     self._status_pub = rospy.Publisher(status_topic, MotionStatus,
       queue_size=10)
 
-    self._path_sub = rospy.Subscriber(path_topic, Pose, self.move_to)
+    self._path_sub = rospy.Subscriber(path_topic, Pose, self._path_callback)
 
     self._lookup_should_timeout = lookup_should_timeout
     self._state = fsm.WAIT
