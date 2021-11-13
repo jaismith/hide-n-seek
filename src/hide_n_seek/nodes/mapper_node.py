@@ -155,9 +155,9 @@ class Mapper:
 
         # populate maps and publish messages
         map_msg.data = [occupancy_grid_probability(log_odds) for log_odds in np.nditer(self.bayesian_map)]
-        seen_map_msg.data = list(self.seen_map.flatten())
+        seen_map_msg.data = map_msg.data + list(self.seen_map.flatten())
         self._map_pub.publish(map_msg)
-        self._map_combined_pub.publish(map_msg.data + seen_map_msg)
+        self._map_combined_pub.publish(seen_map_msg)
 
 
     # extend the maps in the given direction, note that (0, 0) is at the top left so
