@@ -277,9 +277,9 @@ if __name__ == '__main__':
 
   # publish path
   path_pub = rospy.Publisher('navigation_path', Path, queue_size=10)
-  for i in range(100):
+  while len(motion._queue) == 0:
     path_pub.publish(path)
-    rospy.sleep(0.05)
+    rospy.sleep(0.1)
 
   # run node
   motion.run()
