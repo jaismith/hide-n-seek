@@ -17,20 +17,20 @@ import os
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import OccupancyGrid
 
+### constants
 
-# constants
 DEFAULT_SCAN_TOPIC = 'scan'  # for the simulation, it's 'base_scan'
 DEFAULT_MAP_TOPIC = 'map'
-DEFAULT_SEEN_MAP_TOPIC = 'seen_map'
+DEFAULT_MAP_COMBINED_TOPIC = 'map_combined'
 FREQUENCY = 1  # Hz
-MAP_SIZE = 256  # cells, width and heigh t for a square map
+MAP_SIZE = 256  # cells, width and height for a square map
 GRID_RESOLUTION = 0.1  # cell size, m
 LASER_FRAME = 'laser'  # for the simulation, it's 'base_laser_link'
 CAMERA_FOV = pi / 3  # horizontal field of view of the camera, 60 degrees for the ROSBot
 SCAN_ANGLE_OFFSET = pi  # pi for the ROSBot which has laser scan angles offset by pi from the simulations
 
 
-# static function, calculate a probability value for the occupancy grid message using a log odds value
+# static function, calculate a probability value for the occupancy grid message given log odds
 def occupancy_grid_probability(log_odds):
 
     # -1 for unknown cells
@@ -50,7 +50,7 @@ class Mapper:
 
         # setting up the publishers to send the occupancy and seen grids
         self._map_pub = rospy.Publisher(DEFAULT_MAP_TOPIC, OccupancyGrid, queue_size=1)
-        self._seen_map_pub = rospy.Publisher(DEFAULT_SEEN_MAP_TOPIC, OccupancyGrid, queue_size=1)
+        self._map_combined_pub = rospy.Publisher(DEFAULT_MAP_COMBINED_TOPIC, OccupancyGrid, queue_size=1)
 
         # setting up the transformation listener
         self.listener = tf.TransformListener()
@@ -157,7 +157,7 @@ class Mapper:
         map_msg.data = [occupancy_grid_probability(log_odds) for log_odds in np.nditer(self.bayesian_map)]
         seen_map_msg.data = list(self.seen_map.flatten())
         self._map_pub.publish(map_msg)
-        self._seen_map_pub.publish(seen_map_msg)
+        self._map_combined_pub.publish(map_msg.data + seen_map_msg)
 
 
     # extend the maps in the given direction, note that (0, 0) is at the top left so
