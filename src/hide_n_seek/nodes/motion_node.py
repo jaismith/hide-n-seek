@@ -8,15 +8,16 @@ import math
 import rospy
 import tf
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
-from geometry_msgs.msg import Twist, Pose
+from geometry_msgs.msg import Twist, Pose, Point
+from nav_msgs.msg import Path
 from hide_n_seek.msg import MotionStatus
 from enum import Enum
 
 # * constants
 # topics
 CMD_VEL_TOPIC = 'cmd_vel'
-ODOM_TOPIC = 'odom'
 STATUS_TOPIC = 'motion_status'
+PATH_TOPIC = 'navigation_path'
 
 # frames
 FIXED_FRAME = 'odom'
@@ -34,10 +35,10 @@ class fsm(Enum):
     """
     Finite State Machine for the robot.
     """
-    CALC = 1 # calculate movement
-    ROTATE = 2 # rotate to face the goal
-    FORWARD = 3 # move forward
-    WAIT = 6 # wait for next command
+    CALC = 'CALC' # calculate movement
+    ROTATE = 'ROTATE' # rotate to face the goal
+    FORWARD = 'FORWARD' # move forward
+    WAIT = 'WAIT' # wait for next command
 
 # * node
 class Motion:
@@ -46,7 +47,9 @@ class Motion:
   based on odometry data.
   """
 
-  def __init__(self, linear_vel=LINEAR_VEL, angular_vel=ANGULAR_VEL):
+  def __init__(self, linear_vel=LINEAR_VEL, angular_vel=ANGULAR_VEL,
+      cmd_vel_topic=CMD_VEL_TOPIC, status_topic=STATUS_TOPIC,
+      path_topic=PATH_TOPIC, lookup_should_timeout=True):
     """ Constructor """
 
     self._linear_vel = linear_vel
@@ -55,12 +58,23 @@ class Motion:
     self._listener = tf.TransformListener()
     self._rate = rospy.Rate(FREQ)
 
-    self._cmd_pub = rospy.Publisher(CMD_VEL_TOPIC, Twist, queue_size=10)
-    self._status_pub = rospy.Publisher(STATUS_TOPIC, MotionStatus, queue_size=10)
+    self._cmd_pub = rospy.Publisher(cmd_vel_topic, Twist, queue_size=10)
+    self._status_pub = rospy.Publisher(status_topic, MotionStatus,
+      queue_size=10)
 
+    self._path_sub = rospy.Subscriber(path_topic, Pose, self.move_to)
+
+    self._lookup_should_timeout = lookup_should_timeout
     self._state = fsm.WAIT
     self._queue = []
-    self._goal = None
+    self._goal = Pose()
+
+  def _path_callback(self, msg):
+    """ Callback for the path topic, this overrides the current queue """
+
+    rospy.loginfo('Received new path of length {}'.format(len(msg.poses)))
+    poses = (poses.append(pose_stamped.pose) for pose_stamped in msg.poses)
+    self._queue = list(poses)
 
   def get_position(self):
     """ Get the current position of the robot, based on odometry """
@@ -74,10 +88,11 @@ class Motion:
         translation, rotation = self._listener.lookupTransform(
           FIXED_FRAME, BASE_LINK_FRAME, rospy.Time(0)
         )
-      except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as err:
+      except (tf.LookupException, tf.ConnectivityException, 
+          tf.ExtrapolationException) as err:
         err_count += 1
 
-        if err_count > 50:
+        if err_count > 50 and self.lookup_should_timeout:
           rospy.logerr('Error looking up transform: {}'.format(str(err)))
           raise err
 
@@ -104,11 +119,11 @@ class Motion:
 
     self.move(0, 0)
 
-  def move_to(self, x, y, w):
-    """ Move the robot to the given coordinates """
+  def move_to(self, pose):
+    """ Add a waypoint to the queue """
 
-    rospy.loginfo('Received move command: {} {} {}'.format(x, y, w))
-    self._queue.append((x, y, w))
+    rospy.loginfo('Received new waypoint:\n{}'.format(str(pose)))
+    self._queue.append(pose)
 
   @staticmethod
   def optimize_theta(theta):
@@ -135,13 +150,11 @@ class Motion:
     while not rospy.is_shutdown():
       if self._state == fsm.CALC:
         # get goal
-        x, y, w = self._queue.pop(0)
-
-        # generate pose msg from goal
-        self._goal = Pose()
-        self._goal.position.x = x
-        self._goal.position.y = y
-        self._goal.orientation = quaternion_from_euler(0, 0, w)
+        self._goal = self._queue.pop(0)
+        x, y = self._goal.position.x, self._goal.position.y
+        _, _, w = euler_from_quaternion([self._goal.orientation.x,
+          self._goal.orientation.y, self._goal.orientation.z,
+          self._goal.orientation.w])
 
         # get robot pose
         x_cur, y_cur, w_cur = self.get_position()
@@ -173,7 +186,7 @@ class Motion:
           (
             fsm.FORWARD,
             rospy.Duration.from_sec(dist / self._linear_vel),
-            1 # always move forward (our sensor suite is biased in this direction)
+            1 # always move forward
           ),
           (
             fsm.ROTATE,
@@ -231,7 +244,7 @@ class Motion:
       motion_status_msg.header.stamp = rospy.Time.now()
       motion_status_msg.header.frame_id = FIXED_FRAME
       motion_status_msg.goal = self._goal
-      motion_status_msg.state = self._state
+      motion_status_msg.state = self._state.value
       self._status_pub.publish(motion_status_msg)
 
       seq += 1
@@ -250,10 +263,21 @@ if __name__ == '__main__':
   rospy.on_shutdown(motion.stop)
 
   # queue commands to move in a square
-  motion.move_to(1, 0, math.pi / 2)
-  motion.move_to(1, 1, math.pi)
-  motion.move_to(0, 1, (math.pi * 3) / 2)
-  motion.move_to(0, 0, 0)
+  def pose_from_xyw(x, y, w):
+    pose = Pose()
+    pose.position.x = x
+    pose.position.y = y
+    orientation = quaternion_from_euler(0, 0, w)
+    pose.orientation.x = orientation[0]
+    pose.orientation.y = orientation[1]
+    pose.orientation.z = orientation[2]
+    pose.orientation.w = orientation[3]
+    return pose
+
+  motion.move_to(pose_from_xyw(1, 0, math.pi / 2))
+  motion.move_to(pose_from_xyw(1, 1, math.pi))
+  motion.move_to(pose_from_xyw(0, 1, (math.pi * 3) / 2))
+  motion.move_to(pose_from_xyw(0, 0, 0))
 
   # run node
   motion.run()
