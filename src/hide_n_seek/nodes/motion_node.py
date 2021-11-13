@@ -270,9 +270,9 @@ if __name__ == '__main__':
   path.header.seq = 0
   path.header.stamp = rospy.Time.now()
   path.header.frame_id = FIXED_FRAME
-  path.poses.append(pose_from_xyw(1, 0, math.pi / 2))
-  path.poses.append(pose_from_xyw(1, 1, math.pi))
-  path.poses.append(pose_from_xyw(0, 1, (math.pi * 3) / 2))
+  path.poses.append(pose_from_xyw(0.5, 0, math.pi / 2))
+  path.poses.append(pose_from_xyw(0.5, 0.5, math.pi))
+  path.poses.append(pose_from_xyw(0, 0.5, (math.pi * 3) / 2))
   path.poses.append(pose_from_xyw(0, 0, 0))
 
   # publish path
