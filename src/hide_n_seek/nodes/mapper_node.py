@@ -214,7 +214,7 @@ class Mapper:
 
     # given the origin point (x, y) and slope with optional x and y limits,
     # return the list of grid cells (row, column) along the ray from origin with slope
-    def raytracing(self, origin, slope, x_dec, limit=None):
+    def raytracing(self, origin, slope, x_dec=False, limit=None):
         x = origin[0]
         y = origin[1]
 
