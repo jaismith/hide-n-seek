@@ -114,6 +114,7 @@ class Navigation():
             print "Naviagtion: Can't find a target"
             return
 
+        print 'Target: {}'.format(self.map_coords_to_odom(target))
         path = self.bfs(grid, self.to_grid_id(self._pos), self.to_grid_id(target))
 
         # print path
@@ -150,14 +151,13 @@ class Navigation():
         # publish the path to navigation
         self._navigation_pub.publish(path_msg)
 
-    def get_target(self, map, seen, curr_idx):
+    def get_target(self, m, seen, curr_idx):
         """Return a target point (in odom) from the seen map, assuming unseen cells are marked as -1."""
-        map = self.expand(map)
+        res = self.expand(m)
         seen = list(seen)
-        access = lambda i, j: map[self.get_id(i, j)]
+        access = lambda i, j: res[self.get_id(i, j)]
         access_seen = lambda i, j: seen[self.get_id(i, j)]
         directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-
 
         # goal is found, drive straight towards it
         if self._goal_yaw is not None:
@@ -201,9 +201,9 @@ class Navigation():
 
         return None
 
-    def expand(self, map):
+    def expand(self, m):
         directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-        res = list(map)
+        res = list(m)
         access = lambda i, j: res[self.get_id(i, j)]
         walls = list(filter(lambda idx: res[idx] >= OBSTACLE_THRESHOLD_PROBABILITY, range(len(res))))
         q = [self.get_coords(idx) for idx in walls]
@@ -222,12 +222,12 @@ class Navigation():
             offset -= 1
         return res
 
-    def bfs(self, map, curr_idx, tar_idx):
+    def bfs(self, m, curr_idx, tar_idx):
         """Return a path from current point to target point."""
         directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
 
         # Change free cells within minimum distance from walls to walls.
-        res = self.expand(map)
+        res = self.expand(m)
         access = lambda i, j: res[self.get_id(i, j)]
 
         # find a path from curr -> tar
