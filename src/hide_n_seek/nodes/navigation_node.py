@@ -57,7 +57,7 @@ class Navigation():
     def _motion_callback(self, msg):
         # all points are in /odom, no need to transform
         self._pos = (msg.goal.position.x, msg.goal.position.y)
-        quat = msg.goal.position.orientation
+        quat = msg.goal.orientation
         self._yaw = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])[-1]
 
     # def _goal_callback(self, msg):
