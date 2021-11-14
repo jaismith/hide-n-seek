@@ -380,9 +380,9 @@ class Mapper:
     def _goal_angle_callback(self, msg):
         stamp = rospy.Time(msg.header.stamp.secs, msg.header.stamp.nsecs)
         input_angle = float(msg.vector.x)
-
+        print("INPUT ANGLE ----- %f" % input_angle)
         if input_angle == self.prev_angle:
-            return
+            pass#return
         else:
             self.prev_angle = input_angle
 
@@ -395,24 +395,28 @@ class Mapper:
         # assume that the goal is the last cell before the first occupied cell along the ray
         cells = self.raytracing(origin, tan(angle), x_dec=x_dec)
         goal_cell = None
-
+        
         for i in range(len(cells)):
-            if occupancy_grid_probability(self.bayesian_map[cells[i]]) > self.object_threshold:
-                goal_cell = cells[i - 1]
-                break
-
+            
+            cell_index = (self.map_origin[0] + cells[i][0], self.map_origin[1] + cells[i][1])
+            if 0 <= cell_index[0] < self.map_width and 0 <= cell_index[1] < self.map_height:
+                if occupancy_grid_probability(self.bayesian_map[cell_index]) > self.object_threshold:
+                    goal_cell = (self.map_origin[0] + cells[i - 1][0], self.map_origin[1] + cells[i - 1][1])
+                    break
+        
         # publish the location of the goal if an occupied cell is found
         if goal_cell:
             goal_msg = PointStamped()
             goal_msg.header.stamp = stamp
-            goal_msg.frame_id = 'odom'
+            goal_msg.header.frame_id = 'odom'
             goal_msg.header.seq = self.goal_seq
             self.goal_seq += 1
 
             goal_msg.point.x = (goal_cell[1] - self.map_origin[1]) * self.grid_resolution
             goal_msg.point.y = (goal_cell[0] - self.map_origin[0]) * self.grid_resolution
             self._goal_point_pub.publish(goal_msg)
-
+            print("MAPPER GOAL FOUND:")
+            print(goal_msg)
 
     def spin(self):
         # loop until shutdown
