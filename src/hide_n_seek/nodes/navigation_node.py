@@ -196,7 +196,9 @@ class Navigation():
         return None
 
     def expand(self, map):
+        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
         res = list(map)
+        access = lambda i, j: res[self.get_id(i, j)]
         walls = list(filter(lambda idx: res[idx] >= OBSTACLE_THRESHOLD_PROBABILITY, range(len(res))))
         q = [self.get_coords(idx) for idx in walls]
         offset = self.offset
