@@ -2,12 +2,13 @@ from threading import Thread
 import math
 import rospy
 import sys
+import os
 
 sys_paths = ['../']
 for p in sys_paths:
   p = os.path.abspath(p)
   if p not in sys.path:
-      sys.path.append(p)
+    sys.path.append(p)
 
 from nodes.motion_node import Motion
 from nodes.mapper_node import Mapper
