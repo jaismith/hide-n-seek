@@ -90,6 +90,7 @@ class Mapper:
         self.goal_seq = 0
 
         self.laser_scan = None
+        self.prev_angle = None
 
         # mutex lock to prevent race conditions for occupancy grid updates
         self.mutex = Lock()
@@ -379,6 +380,11 @@ class Mapper:
     def _goal_angle_callback(self, msg):
         stamp = rospy.Time(msg.header.stamp.secs, msg.header.stamp.nsecs)
         input_angle = float(msg.vector.x)
+
+        if input_angle == self.prev_angle:
+            return
+        else:
+            self.prev_angle = input_angle
 
         # use transformation from the message timestamp to get the origin and angle for raytracing
         odom_T_bl, _ = self.get_transformations(stamp)
