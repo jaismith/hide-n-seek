@@ -380,11 +380,7 @@ class Mapper:
     def _goal_angle_callback(self, msg):
         stamp = rospy.Time(msg.header.stamp.secs, msg.header.stamp.nsecs)
         input_angle = float(msg.vector.x)
-        print("INPUT ANGLE ----- %f" % input_angle)
-        if input_angle == self.prev_angle:
-            pass#return
-        else:
-            self.prev_angle = input_angle
+        self.prev_angle = input_angle
 
         # use transformation from the message timestamp to get the origin and angle for raytracing
         odom_T_bl, _ = self.get_transformations(stamp)
