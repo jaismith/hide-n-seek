@@ -186,9 +186,8 @@ class Navigation():
             return self._goal
 
         print 'Getting target'
-
         seen = list(seen)
-        access = lambda i, j: res[self.get_id(i, j)]
+        access = lambda i, j: m[self.get_id(i, j)]
         access_seen = lambda i, j: seen[self.get_id(i, j)]
 
         # gather all the reachable nodes
