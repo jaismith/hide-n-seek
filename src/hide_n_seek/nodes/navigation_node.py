@@ -14,6 +14,7 @@ from tf.transformations import euler_from_quaternion, quaternion_from_euler, qua
 from geometry_msgs.msg import PolygonStamped, Point32, PoseStamped # message type for cmd_vel
 from nav_msgs.msg import OccupancyGrid, Path
 from hide_n_seek.msg import MotionStatus
+from visualization_msgs.msg import Marker, MarkerArray
 
 RELEASE = True
 
@@ -25,6 +26,8 @@ MOTION_TOPIC = 'motion_status'   # current goal point published by movement node
 NAVIGATION_TOPIC = 'navigation_path' # topic the calculated path gets published to
 GOAL_TOPIC = 'goal' # topic
 FRAME_ID = 'odom'   # the static reference frame
+DEFAULT_MARKER_TOPIC = 'visualization_marker'
+DEFAULT_MARKER_ARRAY_TOPIC = 'visualization_marker_array'
 # Frequency at which the loop operates
 FREQUENCY = 10 #Hz.
 
@@ -34,6 +37,7 @@ OBSTACLE_THRESHOLD_PROBABILITY = 0.2    # cells on grid with probability greater
 TARGET_VALUE = -50          # special value used to mark the target on the seen map
 
 pose_seq = 0
+marker_id = 0
 
 class Navigation():
     def __init__(self, min_threshold_distance = MIN_THRESHOLD_DISTANCE):
@@ -41,6 +45,8 @@ class Navigation():
         # # Setting up publishers/subscribers.
         # Setting up the publishers.
         self._navigation_pub = rospy.Publisher(NAVIGATION_TOPIC, Path, queue_size=1)
+        self._marker_pub = rospy.Publisher(DEFAULT_MARKER_TOPIC, Marker, queue_size=5)
+        self._marker_array_pub = rospy.Publisher(DEFAULT_MARKER_ARRAY_TOPIC, MarkerArray, queue_size=100)
         # Setting up subscribers.
         self._map_sub = rospy.Subscriber(MAP_TOPIC, OccupancyGrid, self._map_callback, queue_size=1)
         self._motion_sub = rospy.Subscriber(MOTION_TOPIC, MotionStatus, self._motion_callback, queue_size=1)
@@ -55,7 +61,6 @@ class Navigation():
         self._pos = None    # current position of the robot
         self._yaw = None
         self._goal = None   # a target yaw
-
         self._path_seq = 0
 
     def _motion_callback(self, msg):
@@ -123,22 +128,28 @@ class Navigation():
         self._path_seq += 1
         # path_msg.poses.append(to_pose(path[0], self._yaw))
 
+        # generate new marker array
+        marker_array = MarkerArray()
+
         for r in range(1, len(path)):
             path_msg.poses.append(to_pose(path[r], get_yaw(path[r - 1][0], path[r - 1][1], path[r][0], path[r][1])))
+            marker_array.markers.append(to_marker(path_msg.poses[-1]))
+
+        self._marker_array_pub.publish(marker_array)
 
         poses = [ extract_pose(pose) for pose in path_msg.poses]
         print poses
 
-        if len(poses) == 0:
-            side = 5
-
-            for r in range(-side / 2, side / 2 + 1):
-                s = ''
-                nx, ny = target
-                for c in range(-side / 2, side / 2 + 1):
-                    s += "{}, {}, {}".format(self.map_coords_to_odom((nx + r, ny + c)), access(nx + r, ny + c),
-                                             access_seen(nx + r, ny + c)) + '\t'
-                print s
+        # if len(poses) == 0:
+        #     side = 5
+        #
+        #     for r in range(-side / 2, side / 2 + 1):
+        #         s = ''
+        #         nx, ny = target
+        #         for c in range(-side / 2, side / 2 + 1):
+        #             s += "{}, {}, {}".format(self.map_coords_to_odom((nx + r, ny + c)), access(nx + r, ny + c),
+        #                                      access_seen(nx + r, ny + c)) + '\t'
+        #         print s
 
         print "Navigation: Path published."
         # publish the path to navigation
@@ -285,6 +296,35 @@ def get_yaw(x, y, nx, ny):
     dx = nx - x
     dy = ny - y
     return math.copysign(math.acos(dx / math.sqrt(dx ** 2 + dy ** 2)), dy)
+
+def to_marker(pose):
+    """Mark a point in MAP reference frame with a certain type marker."""
+    global marker_id
+    marker_msg = Marker()
+
+    # header
+    marker_msg.header.frame_id = FRAME_ID
+    marker_msg.header.stamp = rospy.Time.now()
+
+    marker_msg.id = marker_id
+    marker_id += 1
+    marker_msg.ns = "nav"
+
+    # marker appearance
+    marker_msg.type = Marker.ARROW
+    marker_msg.scale.x = 1
+    marker_msg.scale.y = 0.2
+    marker_msg.scale.z = 0.2
+
+    marker_msg.color.r = 1.0
+    marker_msg.color.g = 0.0
+    marker_msg.color.b = 0.0
+    marker_msg.color.a = 1.0
+
+    marker_msg.action = Marker.ADD
+    marker_msg.pose = pose
+
+    return marker_msg
 
 def to_pose(pt, yaw):
     global pose_seq
