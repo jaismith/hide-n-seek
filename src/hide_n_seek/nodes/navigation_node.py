@@ -287,6 +287,8 @@ def get_yaw(x, y, nx, ny):
     return math.copysign(math.acos(dx / math.sqrt(dx ** 2 + dy ** 2)), dy)
 
 def to_pose(pt, yaw):
+    global pose_seq
+
     pose = PoseStamped()
     pose.header.frame_id = FRAME_ID
     pose.header.stamp = rospy.Time.now()
