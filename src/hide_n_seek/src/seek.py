@@ -18,7 +18,7 @@ rospy.init_node('seek')
 
 rospy.sleep(5)
 
-motion = Motion(linear_vel=0.1, angular_vel=math.pi / 8)
+motion = Motion(linear_vel=0.2, angular_vel=math.pi / 4)
 mapper = Mapper()
 navigation = Navigation()
 
