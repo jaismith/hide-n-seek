@@ -13,7 +13,7 @@ import rospy # module for ROS APIs
 from tf.transformations import euler_from_quaternion, quaternion_from_euler, quaternion_matrix, translation_matrix
 from geometry_msgs.msg import PolygonStamped, Point32, PoseStamped # message type for cmd_vel
 from nav_msgs.msg import OccupancyGrid, Path
-# from motion_msgs.msg import MotionState
+from hide_n_seek.msg import MotionStatus
 
 RELEASE = True
 
@@ -21,8 +21,8 @@ RELEASE = True
 # Topic names
 # assuming both maps have same params, and target object will be marked with a special value on seen map
 MAP_TOPIC = 'map_combined' if RELEASE else 'map' # name of topic for calculated occupancy grid
-MOTION_TOPIC = 'motion'   # current goal point published by movement node
-NAVIGATION_TOPIC = 'navigation' # topic the calculated path gets published to
+MOTION_TOPIC = 'motion_status'   # current goal point published by movement node
+NAVIGATION_TOPIC = 'navigation_path' # topic the calculated path gets published to
 GOAL_TOPIC = 'goal' # topic
 FRAME_ID = 'odom'   # the static reference frame
 # Frequency at which the loop operates
@@ -41,7 +41,7 @@ class Navigation():
         self._navigation_pub = rospy.Publisher(NAVIGATION_TOPIC, Path, queue_size=1)
         # Setting up subscribers.
         self._map_sub = rospy.Subscriber(MAP_TOPIC, OccupancyGrid, self._map_callback, queue_size=1)
-        # self._motion_sub = rospy.Subscriber(MOTION_TOPIC, MotionState, self._next_point_callback, queue_size=1)
+        self._motion_sub = rospy.Subscriber(MOTION_TOPIC, MotionStatus, self._motion_callback, queue_size=1)
         # self._goal_sub = rospy.Subscriber(GOAL_TOPIC, PoseStamped, self._goal_callback, queue_size=1)
 
         # Parameters.
