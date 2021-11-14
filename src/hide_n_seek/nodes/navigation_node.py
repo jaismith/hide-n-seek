@@ -33,6 +33,9 @@ MIN_THRESHOLD_DISTANCE = 0.2 # m, threshold distance, should be smaller than ran
 OBSTACLE_THRESHOLD_PROBABILITY = 0.2    # cells on grid with probability greater than this will be treated as obstacles
 TARGET_VALUE = -50          # special value used to mark the target on the seen map
 
+pose_seq = 0
+path_seq = 0
+
 class Navigation():
     def __init__(self, min_threshold_distance = MIN_THRESHOLD_DISTANCE):
         """Constructor."""
@@ -86,7 +89,7 @@ class Navigation():
         self.in_bound = lambda i, j: 0 <= i < self._map_width and 0 <= j < self._map_height
         self.odom_to_map = lambda pt: (pt[0] - msg.info.origin.position.x, pt[1] - msg.info.origin.position.y)
         # self.map_coords_to_odom = lambda pt: (pt[0] * self._map_resolution + msg.info.origin.position.x, pt[1] * self._map_resolution + msg.info.origin.position.y)
-        self.map_coords_to_odom = lambda pt: (round(pt[0] * self._map_resolution + msg.info.origin.position.x, 2), round(pt[1] * self._map_resolution + msg.info.origin.position.y, 2))
+        self.map_coords_to_odom = lambda pt: (round(pt[0] * self._map_resolution + msg.info.origin.position.x, 2), round(pt[1] * self._map_resolution + msg.info.origin.position.y, 2Z))
         self._seen = msg.data[len(msg.data) / 2:]
         # print "Seen map received"
 
@@ -114,7 +117,9 @@ class Navigation():
         # format message using generated path
         path_msg = Path()
         path_msg.header.frame_id = FRAME_ID
+        path_msg.header.seq = path_seq
         path_msg.header.stamp = rospy.Time.now()
+        path_seq += 1
         # path_msg.poses.append(to_pose(path[0], self._yaw))
 
         for r in range(1, len(path)):
@@ -122,6 +127,17 @@ class Navigation():
 
         poses = [ extract_pose(pose) for pose in path_msg.poses]
         print poses
+
+        if len(poses) == 0:
+            side = 5
+
+            for r in range(-side / 2, side / 2 + 1):
+                s = ''
+                nx, ny = target
+                for c in range(-side / 2, side / 2 + 1):
+                    s += "{}, {}, {}".format(self.map_coords_to_odom((nx + r, ny + c)), access(nx + r, ny + c),
+                                             access_seen(nx + r, ny + c)) + '\t'
+                print s
 
         print "Navigation: Path published."
         # publish the path to navigation
@@ -164,14 +180,6 @@ class Navigation():
                         # print "Exploring Target: {}".format((nx, ny))
                         # print "{}, {}".format(access(nx, ny), access_seen(nx, ny))
                         # print "Target: {}".format((nx, ny))
-                        side = 5
-
-                        for r in range(-side / 2, side / 2 + 1):
-                            s = ''
-                            for c in range(-side / 2, side / 2 + 1):
-                                s += "{}, {}, {}".format(self.map_coords_to_odom((nx + r, ny + c)), access(nx + r, ny + c), access_seen(nx + r, ny + c)) + '\t'
-                            print s
-
                         return self.map_coords_to_odom((nx, ny))
                     # only expand the free cells
                     if 0 <= access(nx, ny) < OBSTACLE_THRESHOLD_PROBABILITY and nidx not in visited:
@@ -279,6 +287,10 @@ def get_yaw(x, y, nx, ny):
 
 def to_pose(pt, yaw):
     pose = PoseStamped()
+    pose.header.frame_id = FRAME_ID
+    pose.header.stamp = rospy.Time.now()
+    pose.header.seq = pose_seq
+
     pose.pose.position.x = pt[0]
     pose.pose.position.y = pt[1]
     pose.pose.position.z = 0
@@ -288,6 +300,8 @@ def to_pose(pt, yaw):
     pose.pose.orientation.y = quaternion[1]
     pose.pose.orientation.z = quaternion[2]
     pose.pose.orientation.w = quaternion[3]
+
+    pose_seq += 1
     return pose
 
 def extract_pose(pose):
