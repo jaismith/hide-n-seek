@@ -3,6 +3,7 @@ import math
 import rospy
 import sys
 import os
+from geometry_msgs.msg import Vector3Stamped
 
 sys_paths = ['../']
 for p in sys_paths:
@@ -43,3 +44,16 @@ rospy.on_shutdown(shutdown)
 Thread(target=mapper.spin).start()
 Thread(target=motion.run).start()
 Thread(target=navigation.spin).start()
+
+# ! DEBUG
+
+rospy.sleep(30)
+
+angle_pub = rospy.Publisher('object_angle', Vector3Stamped, queue_size=1)
+
+msg = Vector3Stamped()
+msg.header.frame_id = 'odom'
+msg.header.stamp = rospy.Time(5)
+msg.vector.x = 0.1
+
+angle_pub.publish(msg)
