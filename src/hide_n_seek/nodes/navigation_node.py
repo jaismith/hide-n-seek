@@ -32,7 +32,7 @@ DEFAULT_MARKER_ARRAY_TOPIC = 'visualization_marker_array'
 FREQUENCY = 10 #Hz.
 
 # Threshold of minimum clearance distance from the obstacles
-MIN_THRESHOLD_DISTANCE = 0.2 # m, threshold distance, should be smaller than range_max
+MIN_THRESHOLD_DISTANCE = 0.5 # m, threshold distance, should be smaller than range_max
 OBSTACLE_THRESHOLD_PROBABILITY = 0.2    # cells on grid with probability greater than this will be treated as obstacles
 TARGET_VALUE = -50          # special value used to mark the target on the seen map
 
