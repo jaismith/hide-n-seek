@@ -163,6 +163,14 @@ class Navigation():
                         # print "Exploring Target: {}".format((nx, ny))
                         # print "{}, {}".format(access(nx, ny), access_seen(nx, ny))
                         # print "Target: {}".format((nx, ny))
+                        side = 5
+
+                        for r in range(-side / 2, side / 2 + 1):
+                            s = ''
+                            for c in range(-side / 2, side / 2 + 1):
+                                s += "{}, {}, {}".format(self.map_coords_to_odom((nx + r, ny + c)), access(nx + r, ny + c), access_seen(nx + r, ny + c)) + '\t'
+                            print s
+
                         return self.map_coords_to_odom((nx, ny))
                     # only expand the free cells
                     if 0 <= access(nx, ny) < OBSTACLE_THRESHOLD_PROBABILITY and nidx not in visited:
@@ -203,7 +211,7 @@ class Navigation():
         if curr_idx == tar_idx:
             return [curr_idx]
 
-        print "From {} to {}".format(self.get_coords(curr_idx), self.get_coords(tar_idx))
+        print "From {} to {}".format(self.map_coords_to_odom(self.get_coords(curr_idx)), self.map_coords_to_odom(self.get_coords(tar_idx)))
 
         while len(q) and not finished:
             new_q = []
