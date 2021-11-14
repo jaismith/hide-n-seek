@@ -386,10 +386,14 @@ class Mapper:
         angle = atan2(odom_T_bl[1, 0], odom_T_bl[0, 0]) + input_angle
         x_dec = pi / 2 < angle < 3 * pi / 2
 
-        # assume that the goal is the first occupied cell along the ray
+        # assume that the goal is the last cell before the first occupied cell along the ray
         cells = self.raytracing(origin, tan(angle), x_dec=x_dec)
-        goal_cell = next((i for i in cells if occupancy_grid_probability(self.bayesian_map[i]) > self.object_threshold),
-                         default=None)
+        goal_cell = None
+
+        for i in range(len(cells)):
+            if occupancy_grid_probability(self.bayesian_map[cells[i]]) > self.object_threshold:
+                goal_cell = cells[i - 1]
+                break
 
         # publish the location of the goal if an occupied cell is found
         if goal_cell:
