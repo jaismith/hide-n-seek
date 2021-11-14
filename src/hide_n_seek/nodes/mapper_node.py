@@ -21,6 +21,7 @@ from nav_msgs.msg import OccupancyGrid
 
 DEFAULT_SCAN_TOPIC = 'scan'  # for the simulation, it's 'base_scan'
 DEFAULT_MAP_TOPIC = 'map'
+DEFAULT_MAP_SEEN_TOPIC = 'map_seen'
 DEFAULT_MAP_COMBINED_TOPIC = 'map_combined'
 FREQUENCY = 1  # Hz
 MAP_SIZE = 256  # cells, width and height for a square map
@@ -50,6 +51,7 @@ class Mapper:
 
         # setting up the publishers to send the occupancy and seen grids
         self._map_pub = rospy.Publisher(DEFAULT_MAP_TOPIC, OccupancyGrid, queue_size=1)
+        self._map_seen_pub = rospy.Publisher(DEFAULT_MAP_SEEN_TOPIC, OccupancyGrid, queue_size=1)
         self._map_combined_pub = rospy.Publisher(DEFAULT_MAP_COMBINED_TOPIC, OccupancyGrid, queue_size=1)
 
         # setting up the transformation listener
@@ -151,13 +153,16 @@ class Mapper:
     def publish_maps(self):
         map_msg = self.occupancy_grid_message()
         seen_map_msg = self.occupancy_grid_message()
+        combined_map_msg = self.occupancy_grid_message()
         self.map_seq += 1
 
         # populate maps and publish messages
         map_msg.data = [occupancy_grid_probability(log_odds) for log_odds in np.nditer(self.bayesian_map)]
-        seen_map_msg.data = map_msg.data + list(self.seen_map.flatten())
+        seen_map_msg.data = list(self.seen_map.flatten())
+        combined_map_msg.data = map_msg.data + seen_map_msg.data
         self._map_pub.publish(map_msg)
-        self._map_combined_pub.publish(seen_map_msg)
+        self._map_seen_pub.publish(seen_map_msg)
+        self._map_combined_pub.publish(combined_map_msg)
 
 
     # extend the maps in the given direction, note that (0, 0) is at the top left so
