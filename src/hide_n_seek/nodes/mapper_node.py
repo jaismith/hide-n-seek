@@ -6,7 +6,7 @@
 
 ### imports
 
-from math import sin, cos, pi, log, exp
+from math import sin, cos, tan, atan2, pi, log, exp
 from multiprocessing import Lock
 import rospy
 import tf
@@ -16,19 +16,23 @@ import time
 import os
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import OccupancyGrid
+from geometry_msgs.msg import Vector3Stamped, PointStamped
 
 ### constants
 
-DEFAULT_SCAN_TOPIC = 'scan'  # for the simulation, it's 'base_scan'
-DEFAULT_MAP_TOPIC = 'map'
-DEFAULT_MAP_SEEN_TOPIC = 'map_seen'
-DEFAULT_MAP_COMBINED_TOPIC = 'map_combined'
+SCAN_TOPIC = 'scan'  # for the simulation, it's 'base_scan'
+MAP_TOPIC = 'map'
+MAP_SEEN_TOPIC = 'map_seen'
+MAP_COMBINED_TOPIC = 'map_combined'
+GOAL_ANGLE_TOPIC = 'goal_angle'
+GOAL_POSE_TOPIC = 'goal_pose'
 FREQUENCY = 1  # Hz
 MAP_SIZE = 256  # cells, width and height for a square map
 GRID_RESOLUTION = 0.1  # cell size, m
 LASER_FRAME = 'laser'  # for the simulation, it's 'base_laser_link'
 CAMERA_FOV = pi / 3  # horizontal field of view of the camera, 60 degrees for the ROSBot
 SCAN_ANGLE_OFFSET = pi  # pi for the ROSBot which has laser scan angles offset by pi from the simulations
+OBJECT_THRESHOLD = 0.8  # probability threshold for the object to be detected when looking for the goal pose
 
 
 # static function, calculate a probability value for the occupancy grid message given log odds
@@ -45,16 +49,19 @@ def occupancy_grid_probability(log_odds):
 class Mapper:
     def __init__(self, frequency=FREQUENCY, map_size=MAP_SIZE, grid_resolution=GRID_RESOLUTION,
                  laser_frame=LASER_FRAME, camera_fov=CAMERA_FOV, scan_angle_offset=SCAN_ANGLE_OFFSET,
-                 scan_topic=DEFAULT_SCAN_TOPIC, map_topic=DEFAULT_MAP_TOPIC, map_seen_topic=DEFAULT_MAP_SEEN_TOPIC,
-                 map_combined_topic=DEFAULT_MAP_COMBINED_TOPIC):
+                 scan_topic=SCAN_TOPIC, map_topic=MAP_TOPIC, map_seen_topic=MAP_SEEN_TOPIC,
+                 map_combined_topic=MAP_COMBINED_TOPIC, goal_angle_topic=GOAL_ANGLE_TOPIC,
+                 goal_pose_topic=GOAL_POSE_TOPIC, object_threshold=OBJECT_THRESHOLD):
 
         # setting up the subscriber to receive laser scan messages
         self._laser_sub = rospy.Subscriber(scan_topic, LaserScan, self._laser_callback, queue_size=1)
+        self._goal_angle_sub = rospy.Subscriber(goal_angle_topic, Vector3Stamped, self._goal_angle_callback, queue_size=1)
 
         # setting up the publishers to send the occupancy and seen grids
         self._map_pub = rospy.Publisher(map_topic, OccupancyGrid, queue_size=1)
         self._map_seen_pub = rospy.Publisher(map_seen_topic, OccupancyGrid, queue_size=1)
         self._map_combined_pub = rospy.Publisher(map_combined_topic, OccupancyGrid, queue_size=1)
+        self._goal_point_pub = rospy.Publisher(goal_pose_topic, PointStamped, queue_size=1)
 
         # setting up the transformation listener
         self.listener = tf.TransformListener()
@@ -69,6 +76,7 @@ class Mapper:
         self.laser_frame = laser_frame
         self.camera_fov = camera_fov
         self.scan_angle_offset = scan_angle_offset
+        self.object_threshold = object_threshold
 
         # initialize empty occupancy grid maps
         # Bayesian grid stores log-odds probability of occupancy for each cell
@@ -79,6 +87,7 @@ class Mapper:
         # row and column indices of the cell (0, 0) in the map, in the center at first
         self.map_origin = [self.map_height / 2, self.map_width / 2]
         self.map_seq = 0
+        self.goal_seq = 0
 
         self.laser_scan = None
 
@@ -202,9 +211,43 @@ class Mapper:
                 self.seen_map = np.concatenate((self.seen_map, extension), axis=1)
 
 
-    # given the origin and target points (x, y) in odom, return the set of grid cells (row, column)
+    # given the origin point (x, y) and slope with optional x and y limits,
+    # return the list of grid cells (row, column) along the ray from origin with slope
+    def raytracing(self, origin, slope, x_dec, limit=None):
+        x = origin[0]
+        y = origin[1]
+
+        if limit:
+            x_limit = limit[0]
+            y_limit = limit[1]
+        else:
+            x_limit = self.map_width * self.grid_resolution if not x_dec else 0.0
+            y_limit = self.map_height * self.grid_resolution if slope >= 0 else 0.0
+
+        row_step = 1 if slope > 0 else -1  # to help with creating ranges of rows
+        cells = []
+
+        # move from left to right, adding all cells intersecting the line for each column
+        while x < x_limit or (x_dec and x > x_limit):
+            column = int(round(x / self.grid_resolution, 5))
+            x = (column + 1 if not x_dec else column - 1) * self.grid_resolution
+
+            # calculate y-intercept of the line and the next column boundary
+            y_next = slope * (x - origin[0]) + origin[1]
+            y_next = min(y_next, y_limit) if slope > 0 else max(y_next, y_limit)  # bound by y at the end of the line
+
+            # use y and y_next to get the range of rows for the current column
+            cells.extend((row, column) for row in range(int(round(y / self.grid_resolution, 5)),
+                                                        int(round(y_next / self.grid_resolution, 5)) + row_step,
+                                                        row_step))
+            y = y_next
+
+        return cells
+
+
+    # given the origin and target points (x, y) in odom, return the list of grid cells (row, column)
     # that intersect the ray/line between the origin and target points
-    def raytracing(self, origin, target):
+    def laser_raytracing(self, origin, target):
 
         # get cell coordinates for origin and target points
         x_origin = int(round(origin[0] / self.grid_resolution, 5))
@@ -234,25 +277,7 @@ class Mapper:
             x_limit = origin[0]
             y_limit = origin[1]
 
-        row_step = 1 if slope > 0 else -1  # to help with creating ranges of rows
-        cells = set()
-
-        # move from left to right, adding all cells intersecting the line for each column
-        while x < x_limit:
-            column = int(round(x / self.grid_resolution, 5))
-            x = (column + 1) * self.grid_resolution
-
-            # calculate y-intercept of the line and the next column boundary
-            y_next = slope * (x - origin[0]) + origin[1]
-            y_next = min(y_next, y_limit) if slope > 0 else max(y_next, y_limit)  # bound by y at the end of the line
-
-            # use y and y_next to get the range of rows for the current column
-            cells.update((row, column) for row in range(int(round(y / self.grid_resolution, 5)),
-                                                        int(round(y_next / self.grid_resolution, 5)) + row_step,
-                                                        row_step))
-            y = y_next
-
-        return cells
+        return self.raytracing([x, y], slope, limit=[x_limit, y_limit])
 
 
     def update_maps(self):
@@ -288,7 +313,7 @@ class Mapper:
                 target = odom_T_bl.dot(bl_T_bll.dot(np.array([x_bll, y_bll, 0, 1]).T))[:2]
 
                 # use raytracing to add the set of cells along the ray of the laser measurement
-                cells = self.raytracing(origin, target)
+                cells = self.laser_raytracing(origin, target)
                 all_cells.update(cells)
                 if min(abs(self.scan_angle_offset - angle), abs(self.scan_angle_offset - angle - 2 * pi)) < self.camera_fov / 2.0:
                     seen.update(cells)
@@ -347,6 +372,36 @@ class Mapper:
         # mutex lock to avoid updating the laser scan in the middle of a map processing step
         with self.mutex:
             self.laser_scan = msg
+
+
+    # given the relative angle of the goal with a timestamp, publish the location (x, y) of the goal
+    # in the odom reference frame, by raytracing from the robot's pose until an occupied cell is reached
+    def _goal_angle_callback(self, msg):
+        stamp = rospy.Time(msg.header.stamp.secs, msg.header.stamp.nsecs)
+        input_angle = float(msg.vector.x)
+
+        # use transformation from the message timestamp to get the origin and angle for raytracing
+        odom_T_bl, _ = self.get_transformations(stamp)
+        origin = odom_T_bl.dot(np.array([0, 0, 0, 1]).T)[:2]
+        angle = atan2(odom_T_bl[1, 0], odom_T_bl[0, 0]) + input_angle
+        x_dec = pi / 2 < angle < 3 * pi / 2
+
+        # assume that the goal is the first occupied cell along the ray
+        cells = self.raytracing(origin, tan(angle), x_dec=x_dec)
+        goal_cell = next((i for i in cells if occupancy_grid_probability(self.bayesian_map[i]) > self.object_threshold),
+                         default=None)
+
+        # publish the location of the goal if an occupied cell is found
+        if goal_cell:
+            goal_msg = PointStamped()
+            goal_msg.header.stamp = stamp
+            goal_msg.frame_id = 'odom'
+            goal_msg.header.seq = self.goal_seq
+            self.goal_seq += 1
+
+            goal_msg.point.x = (goal_cell[1] - self.map_origin[1]) * self.grid_resolution
+            goal_msg.point.y = (goal_cell[0] - self.map_origin[0]) * self.grid_resolution
+            self._goal_point_pub.publish(goal_msg)
 
 
     def spin(self):
