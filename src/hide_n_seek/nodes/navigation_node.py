@@ -79,6 +79,8 @@ class Navigation():
         if self._pos is None:
             return
 
+        print "Navigation: goal {}".format(msg.data)
+
         goal_yaw = self._yaw + msg.data
         if goal_yaw  > math.pi:
             goal_yaw  = goal_yaw  - 2 * math.pi
