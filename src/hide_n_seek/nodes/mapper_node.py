@@ -288,7 +288,7 @@ class Mapper:
                 # use raytracing to add the set of cells along the ray of the laser measurement
                 cells = self.raytracing(origin, target)
                 all_cells.update(cells)
-                if abs(self.scan_angle_offset - angle) < self.camera_fov / 2.0:
+                if min(abs(self.scan_angle_offset - angle), abs(self.scan_angle_offset - angle - 2 * pi)) < self.camera_fov / 2.0:
                     seen.update(cells)
 
                 # add target cell to the set of occupied cells if within range
