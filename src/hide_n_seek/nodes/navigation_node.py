@@ -67,6 +67,7 @@ class Navigation():
         self._path_seq = 0
         self._map_metadata = None
         self._marker_array = MarkerArray()
+        self._directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
 
     def _motion_callback(self, msg):
         # all points are in /odom, no need to transform
@@ -188,47 +189,6 @@ class Navigation():
         seen = list(seen)
         access = lambda i, j: res[self.get_id(i, j)]
         access_seen = lambda i, j: seen[self.get_id(i, j)]
-        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-
-        # goal is found, drive straight towards it
-        # if self._goal_yaw is not None:
-        #     dx = self._map_resolution / 2
-        #     dy = dx * math.tan(self._goal_yaw)
-        #     x, y = list(self._pos)
-        #     while res[self.to_grid_id((x, y))] == 0:
-        #         x += dx
-        #         y += dy
-        #     return (x - dx, y - dy)
-
-        # # search for target if it's been found, otherwise the closest unseen cell
-        # search_for = -1
-        # # go towards the target
-        # q = [self.get_coords(curr_idx)]
-        # visited = set()
-        # visited.add(curr_idx)
-        #
-        # while len(q):
-        #     new_q = []
-        #     for coords in q:
-        #         for dir in directions:
-        #             nx = coords[0] + dir[0]
-        #             ny = coords[1] + dir[1]
-        #             nidx = self.get_id(nx, ny)
-        #
-        #             if not self.in_bound(nx, ny):
-        #                 continue
-        #
-        #             # target found
-        #             if access_seen(nx, ny) == search_for:
-        #                 # print "Exploring Target: {}".format((nx, ny))
-        #                 # print "{}, {}".format(access(nx, ny), access_seen(nx, ny))
-        #                 # print "Target: {}".format((nx, ny))
-        #                 return self.map_coords_to_odom((nx, ny))
-        #             # only expand the free cells
-        #             if access(nx, ny) == 0 and nidx not in visited:
-        #                 visited.add(nidx)
-        #                 new_q.append((nx, ny))
-        #     q = new_q
 
         # gather all the reachable nodes
         q = [self.get_coords(curr_idx)]
@@ -237,7 +197,7 @@ class Navigation():
         while len(q):
             new_q = []
             for coords in q:
-                for dir in directions:
+                for dir in self._directions:
                     nx = coords[0] + dir[0]
                     ny = coords[1] + dir[1]
                     nidx = self.get_id(nx, ny)
@@ -263,7 +223,7 @@ class Navigation():
         while len(q):
             new_q = []
             for coords in q:
-                for dir in directions:
+                for dir in self._directions:
                     nx = coords[0] + dir[0]
                     ny = coords[1] + dir[1]
                     nidx = self.get_id(nx, ny)
@@ -304,8 +264,6 @@ class Navigation():
         return self.map_coords_to_odom(fr[len(fr) / 2])
 
     def explore_frontier(self, x, y, visited, reachable, seen):
-        # print 'Exploring: {}, {} - {} {}'.format(x, y, self.get_id(x, y) in visited, self.get_id(x, y) in reachable)
-        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
         access_seen = lambda i, j: seen[self.get_id(i, j)]
         frontier = [(x, y)]
         q = [(x, y)]
@@ -325,7 +283,7 @@ class Navigation():
                         # filter out nodes farther away from the actual frontier or unreachable
                         is_neighboring_seen = False
                         is_reachable = nidx in reachable
-                        for dir in directions:
+                        for dir in self._directions:
                             nnx = nx + dir[0]
                             nny = ny + dir[1]
                             if self.in_bound(nnx, nny):
@@ -351,7 +309,6 @@ class Navigation():
 
 
     def expand(self, m):
-        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
         res = list(m)
         access = lambda i, j: res[self.get_id(i, j)]
         walls = list(filter(lambda idx: res[idx] >= OBSTACLE_THRESHOLD_PROBABILITY, range(len(res))))
@@ -360,7 +317,7 @@ class Navigation():
         while len(q) and offset > 0:
             new_q = []
             for coords in q:
-                for dir in directions:
+                for dir in self._directions:
                     nx = coords[0] + dir[0]
                     ny = coords[1] + dir[1]
                     # only rewrite new coord that is in bound and free,
@@ -373,8 +330,6 @@ class Navigation():
 
     def bfs(self, m, curr_idx, tar_idx):
         """Return a path from current point to target point."""
-        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-
         # Change free cells within minimum distance from walls to walls.
         res = self.expand(m)
 
@@ -396,7 +351,7 @@ class Navigation():
             for coords in q:
                 if finished: break
                 idx = self.get_id(coords[0], coords[1])
-                for dir in directions:
+                for dir in self._directions:
                     nx = coords[0] + dir[0]
                     ny = coords[1] + dir[1]
                     nidx = self.get_id(nx, ny)
