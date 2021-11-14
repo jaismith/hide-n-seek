@@ -21,7 +21,7 @@ rospy.sleep(5)
 # * HUSARION
 DEFAULT_SCAN_TOPIC = 'scan'
 LASER_FRAME = 'laser'
-SCAN_ANGLE_OFFSET = pi
+SCAN_ANGLE_OFFSET = math.pi
 
 # * SIMULATOR
 # DEFAULT_SCAN_TOPIC = 'base_scan'
