@@ -44,15 +44,17 @@ def occupancy_grid_probability(log_odds):
 
 class Mapper:
     def __init__(self, frequency=FREQUENCY, map_size=MAP_SIZE, grid_resolution=GRID_RESOLUTION,
-                 laser_frame=LASER_FRAME, camera_fov=CAMERA_FOV, scan_angle_offset=SCAN_ANGLE_OFFSET):
+                 laser_frame=LASER_FRAME, camera_fov=CAMERA_FOV, scan_angle_offset=SCAN_ANGLE_OFFSET,
+                 scan_topic=DEFAULT_SCAN_TOPIC, map_topic=DEFAULT_MAP_TOPIC, map_seen_topic=DEFAULT_MAP_SEEN_TOPIC,
+                 map_combined_topic=DEFAULT_MAP_COMBINED_TOPIC):
 
         # setting up the subscriber to receive laser scan messages
-        self._laser_sub = rospy.Subscriber(DEFAULT_SCAN_TOPIC, LaserScan, self._laser_callback, queue_size=1)
+        self._laser_sub = rospy.Subscriber(scan_topic, LaserScan, self._laser_callback, queue_size=1)
 
         # setting up the publishers to send the occupancy and seen grids
-        self._map_pub = rospy.Publisher(DEFAULT_MAP_TOPIC, OccupancyGrid, queue_size=1)
-        self._map_seen_pub = rospy.Publisher(DEFAULT_MAP_SEEN_TOPIC, OccupancyGrid, queue_size=1)
-        self._map_combined_pub = rospy.Publisher(DEFAULT_MAP_COMBINED_TOPIC, OccupancyGrid, queue_size=1)
+        self._map_pub = rospy.Publisher(map_topic, OccupancyGrid, queue_size=1)
+        self._map_seen_pub = rospy.Publisher(map_seen_topic, OccupancyGrid, queue_size=1)
+        self._map_combined_pub = rospy.Publisher(map_combined_topic, OccupancyGrid, queue_size=1)
 
         # setting up the transformation listener
         self.listener = tf.TransformListener()

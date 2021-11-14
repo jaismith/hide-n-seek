@@ -18,8 +18,20 @@ rospy.init_node('seek')
 
 rospy.sleep(5)
 
+# * HUSARION
+# DEFAULT_SCAN_TOPIC = 'scan'
+# LASER_FRAME = 'laser'
+# SCAN_ANGLE_OFFSET = pi
+
+# * SIMULATOR
+DEFAULT_SCAN_TOPIC = 'base_scan'
+LASER_FRAME = 'base_laser_link'
+SCAN_ANGLE_OFFSET = 0
+
 motion = Motion(linear_vel=0.2, angular_vel=math.pi / 4)
-mapper = Mapper()
+mapper = Mapper(default_scan_topic=DEFAULT_SCAN_TOPIC,
+  laser_frame=LASER_FRAME,
+  scan_angle_offset=SCAN_ANGLE_OFFSET)
 navigation = Navigation()
 
 def shutdown():
