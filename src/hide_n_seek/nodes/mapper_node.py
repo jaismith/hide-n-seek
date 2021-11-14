@@ -272,7 +272,7 @@ class Mapper:
             all_cells = set()
             occupied = set()
             seen = set()
-            angle = self.laser_scan.angle_min - self.laser_scan.angle_increment + self.scan_angle_offset
+            angle = self.laser_scan.angle_min - self.laser_scan.angle_increment
             for measurement in self.laser_scan.ranges:
                 angle += self.laser_scan.angle_increment
 
@@ -288,7 +288,7 @@ class Mapper:
                 # use raytracing to add the set of cells along the ray of the laser measurement
                 cells = self.raytracing(origin, target)
                 all_cells.update(cells)
-                if abs(angle) < self.camera_fov / 2.0:
+                if abs(self.scan_angle_offset - angle) < self.camera_fov / 2.0:
                     seen.update(cells)
 
                 # add target cell to the set of occupied cells if within range
