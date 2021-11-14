@@ -378,7 +378,11 @@ class Mapper:
     # given the relative angle of the goal with a timestamp, publish the location (x, y) of the goal
     # in the odom reference frame, by raytracing from the robot's pose until an occupied cell is reached
     def _goal_angle_callback(self, msg):
+        print("current time:")
+        print(rospy.Time.now())
+        print("message time:")
         stamp = rospy.Time(msg.header.stamp.secs, msg.header.stamp.nsecs)
+        print(stamp)
         input_angle = float(msg.vector.x)
         self.prev_angle = input_angle
 
