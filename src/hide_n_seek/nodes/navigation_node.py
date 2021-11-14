@@ -284,9 +284,9 @@ class Navigation():
         marker_msg.id = 0
         marker_msg.ns = "nav"
         # marker appearance
-        marker_msg.type = Marker.CIRCLE
-        marker_msg.scale.x = 0.5
-        marker_msg.scale.y = 0.5
+        marker_msg.type = Marker.SPHERE
+        marker_msg.scale.x = 0.05
+        marker_msg.scale.y = 0.05
         marker_msg.scale.z = 0.5
         marker_msg.color.r = 0.0
         marker_msg.color.g = 1.0
