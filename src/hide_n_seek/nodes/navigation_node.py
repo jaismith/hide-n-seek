@@ -67,7 +67,7 @@ class Navigation():
         self._path_seq = 0
         self._map_metadata = None
         self._marker_array = MarkerArray()
-        self._directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        self._directions = [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)]
 
     def _motion_callback(self, msg):
         # all points are in /odom, no need to transform
