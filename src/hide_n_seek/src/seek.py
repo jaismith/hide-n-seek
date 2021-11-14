@@ -14,6 +14,7 @@ for p in sys_paths:
 from nodes.motion_node import Motion
 from nodes.mapper_node import Mapper
 from nodes.navigation_node import Navigation
+from nodes.angle_pub_node import AnglePublisher
 
 rospy.init_node('seek')
 
@@ -34,6 +35,7 @@ mapper = Mapper(scan_topic=DEFAULT_SCAN_TOPIC,
   laser_frame=LASER_FRAME,
   scan_angle_offset=SCAN_ANGLE_OFFSET)
 navigation = Navigation()
+angle_pub = AnglePublisher()
 
 def shutdown():
   motion.stop()
@@ -44,6 +46,7 @@ rospy.on_shutdown(shutdown)
 Thread(target=mapper.spin).start()
 Thread(target=motion.run).start()
 Thread(target=navigation.spin).start()
+Thread(target=angle_pub.pub).start()
 
 # ! DEBUG
 
@@ -56,4 +59,3 @@ msg.header.frame_id = 'odom'
 msg.header.stamp = rospy.Time(5)
 msg.vector.x = 0.1
 
-angle_pub.publish(msg)
