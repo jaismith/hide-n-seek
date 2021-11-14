@@ -30,6 +30,9 @@ FREQ = 100
 LINEAR_VEL = 0.2 # m/s
 ANGULAR_VEL = math.pi / 4 # rad/s
 
+# angle tolerance
+ANGLE_TOLERANCE = math.pi / 72 # rad
+
 # * fsm
 class fsm(Enum):
     """
@@ -171,24 +174,28 @@ class Motion:
         dist = math.sqrt((dx ** 2) + (dy ** 2))
         theta2 = Motion.optimize_theta(w - yaw)
 
-        # queue pending actions
-        pending.extend([
-          (
+        # determine necessary ops
+        ops = []
+        if abs(theta) > ANGLE_TOLERANCE:
+          ops.append((
             fsm.ROTATE,
             rospy.Duration.from_sec(abs(theta) / self._angular_vel),
             1 if theta > 0 else -1
-          ),
-          (
-            fsm.FORWARD,
-            rospy.Duration.from_sec(dist / self._linear_vel),
-            1 # always move forward
-          ),
-          (
+          ))
+        ops.append((
+          fsm.FORWARD,
+          rospy.Duration.from_sec(dist / self._linear_vel),
+          1 # always move forward
+        ))
+        if abs(theta2) > ANGLE_TOLERANCE:
+          ops.append((
             fsm.ROTATE,
             rospy.Duration.from_sec(abs(theta2) / self._angular_vel),
             1 if theta2 > 0 else -1
-          ),
-        ])
+          ))
+
+        # queue pending actions
+        pending.extend(ops)
 
         # move to wait state
         self._state = fsm.WAIT
