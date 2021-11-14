@@ -7,6 +7,7 @@
 # Import of python modules.
 import math
 import numpy as np
+from random import random
 
 # import of relevant libraries.
 import rospy # module for ROS APIs
@@ -17,14 +18,10 @@ from std_msgs.msg import Float32
 from hide_n_seek.msg import MotionStatus
 from visualization_msgs.msg import Marker, MarkerArray
 
-RELEASE = True
-
 # Constants.
 # Topic names
 # assuming both maps have same params, and target object will be marked with a special value on seen map
-MAP_TOPIC = 'map_combined' if RELEASE else 'map' # name of topic for calculated occupancy grid
-EXPANDED_MAP_TOPIC1 = 'expanded1'
-EXPANDED_MAP_TOPIC2 = 'expanded2'
+MAP_TOPIC = 'map_combined'
 MOTION_TOPIC = 'motion_status'   # current goal point published by movement node
 NAVIGATION_TOPIC = 'navigation_path' # topic the calculated path gets published to
 GOAL_TOPIC = 'object_angle'
@@ -51,8 +48,6 @@ class Navigation():
         self._navigation_pub = rospy.Publisher(NAVIGATION_TOPIC, Path, queue_size=1)
         self._marker_pub = rospy.Publisher(DEFAULT_MARKER_TOPIC, Marker, queue_size=5)
         self._marker_array_pub = rospy.Publisher(DEFAULT_MARKER_ARRAY_TOPIC, MarkerArray, queue_size=100)
-        # self._expanded_map_pub1 = rospy.Publisher(EXPANDED_MAP_TOPIC1, OccupancyGrid, queue_size=5)
-        # self._expanded_map_pub2 = rospy.Publisher(EXPANDED_MAP_TOPIC2, OccupancyGrid, queue_size=5)
         # Setting up subscribers.
         self._map_sub = rospy.Subscriber(MAP_TOPIC, OccupancyGrid, self._map_callback, queue_size=1)
         self._motion_sub = rospy.Subscriber(MOTION_TOPIC, MotionStatus, self._motion_callback, queue_size=1)
@@ -115,8 +110,17 @@ class Navigation():
         self._seen = msg.data[len(msg.data) / 2:]
         # print "Seen map received"
 
-        grid = msg.data[:len(msg.data) / 2] if RELEASE else msg.data
+        grid = msg.data[:len(msg.data) / 2]
         grid = [-1 if prob < 0 else 1 if prob > OBSTACLE_THRESHOLD_PROBABILITY else 0 for prob in grid]
+
+        # textfile = open("map.txt", "w")
+        # for element in grid:
+        #     textfile.write(str(element) + ",")
+        # textfile.close()
+        # textfile = open("seen.txt", "w")
+        # for element in self._seen:
+        #     textfile.write(str(element) + ",")
+        # textfile.close()
 
         # mark the obstacles based on
         grid = [0 if 0 <= prob < OBSTACLE_THRESHOLD_PROBABILITY else 1 for prob in grid]
@@ -124,18 +128,16 @@ class Navigation():
         self._yaw = 0
 
         # wait until having heard from both map and movement
-        if RELEASE:
-            if self._pos is None or self._seen is None: return []
+        if self._pos is None or self._seen is None: return []
         # # determine next target point from seen map
-            target = self.get_target(grid, self._seen, self.to_grid_id(self._pos))
-        else:
-            target = (1, 1)
+        target = self.get_target(grid, self._seen, self.to_grid_id(self._pos))
+
+        print "Got target: {}".format(target)
 
         if target is None:
             print "Naviagtion: Can't find a target"
             return
 
-        print 'Target: {}'.format(self.map_coords_to_odom(target))
         path = self.bfs(grid, self.to_grid_id(self._pos), self.to_grid_id(target))
 
         # print path
@@ -166,7 +168,7 @@ class Navigation():
         #         print s
 
         self.mark(target)
-        self.mark_poses(path_msg.poses)
+        # self.mark_poses(path_msg.poses)
 
         print "Navigation: Path published."
         # publish the path to navigation
@@ -177,9 +179,11 @@ class Navigation():
         if self._goal is not None:
             return self._goal
 
+        print 'Getting target'
+
         res = self.expand(m)
 
-        # self._expanded_map_pub1.publish(self.to_occupancy_grid(res))
+        print 'Expanded'
 
         seen = list(seen)
         access = lambda i, j: res[self.get_id(i, j)]
@@ -238,10 +242,16 @@ class Navigation():
                     ny = coords[1] + dir[1]
                     nidx = self.get_id(nx, ny)
                     # only rewrite new coord that is in bound and free,
-                    if self.in_bound(nx, ny) and access(nx, ny) == 0:
+                    if self.in_bound(nx, ny) and nidx not in reachable and access(nx, ny) == 0:
                         reachable.add(nidx)
                         new_q.append((nx, ny))
             q = new_q
+
+        # cnt = 0
+        # for x in reachable:
+        #     cnt += 1
+        #
+        # print "Reachable: {}".format(cnt)
 
         frontiers = []
         # find frontiers
@@ -263,9 +273,9 @@ class Navigation():
 
                     # found an unseen node, explore
                     if access_seen(nx, ny) == -1:
-                        frontier = [(nx, ny)]
-                        self.explore_frontier(nx, ny, visited, reachable, seen, frontier)
-                        print "frontier len: {}".format(len(frontier))
+                        visited.add(nidx)
+                        frontier = self.explore_frontier(nx, ny, visited, reachable, seen)
+                        # print "frontier len: {}".format(len(frontier))
                         frontiers.append(frontier)
 
                     # otherwise only expand free cells
@@ -286,34 +296,53 @@ class Navigation():
                 length = len(frontier)
                 fr = frontier
 
-        # return the first node in the selected frontier
-        return self.map_coords_to_odom(fr[0])
 
-    def explore_frontier(self, x, y, visited, reachable, seen, frontier):
+
+        print 'Max frontier: {}'.format(len(fr))
+        # # return the midpoint in the selected frontier (not quite)
+        # return self.map_coords_to_odom(fr[int(len(fr) * random())])
+        return self.map_coords_to_odom(fr[len(fr) / 2])
+
+    def explore_frontier(self, x, y, visited, reachable, seen):
+        # print 'Exploring: {}, {} - {} {}'.format(x, y, self.get_id(x, y) in visited, self.get_id(x, y) in reachable)
         directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
         access_seen = lambda i, j: seen[self.get_id(i, j)]
+        frontier = [(x, y)]
+        q = [(x, y)]
 
-        for dx in (-1, 2):
-            for dy in (-1, 2):
-                nx = x + dx
-                ny = y + dy
-                nidx = self.get_id(nx, ny)
-                # skip current, seen points, and visited points
-                if (dx == 0 and dy == 0) or not self.in_bound(nx, ny) or nidx in visited or access_seen(nx, ny) != -1:
-                    continue
+        while len(q) > 0:
+            new_q = []
+            for x, y in q:
+                for dx in (-1, 2):
+                    for dy in (-1, 2):
+                        nx = x + dx
+                        ny = y + dy
+                        nidx = self.get_id(nx, ny)
+                        # skip current, seen points, and visited points
+                        if (dx == 0 and dy == 0) or not self.in_bound(nx, ny) or nidx in visited or access_seen(nx,ny) != -1:
+                            continue
 
-                is_reachable = False
-                for dir in directions:
-                    nnx = nx + dir[0]
-                    nny = ny + dir[1]
-                    nnidx = self.get_id(nnx, nny)
-                    if self.in_bound(nnx, nny) and nnidx in reachable:
-                        is_reachable = True
-                        break
-                if is_reachable:
-                    visited.add((nnx, nny))
-                    frontier.append((nnx, nny))
-                    self.explore_frontier(nnx, nny, visited, reachable, seen, frontier)
+                        # filter out nodes farther away from the actual frontier or unreachable
+                        is_neighboring_seen = False
+                        is_reachable = nidx in reachable
+                        for dir in directions:
+                            nnx = nx + dir[0]
+                            nny = ny + dir[1]
+                            if self.in_bound(nnx, nny):
+                                if self.get_id(nnx, nny) in reachable:
+                                    is_reachable = True
+                                if access_seen(nnx, nny) != -1:
+                                    is_neighboring_seen = True
+
+                        # if is_reachable:
+                        if is_reachable and is_neighboring_seen:
+                            visited.add(nidx)
+                            frontier.append((nx, ny))
+                            new_q.append((nx, ny))
+            q = new_q
+        return frontier
+
+
 
 
 
@@ -348,8 +377,6 @@ class Navigation():
 
         # Change free cells within minimum distance from walls to walls.
         res = self.expand(m)
-
-        # self._expanded_map_pub2.publish(self.to_occupancy_grid(res))
 
         access = lambda i, j: res[self.get_id(i, j)]
 

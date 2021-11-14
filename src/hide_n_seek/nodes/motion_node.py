@@ -27,7 +27,7 @@ BASE_LINK_FRAME = 'base_link'
 FREQ = 100
 
 # motion
-LINEAR_VEL = 0.2 # m/s
+LINEAR_VEL = 0.4 # m/s
 ANGULAR_VEL = math.pi / 4 # rad/s
 
 # angle tolerance
