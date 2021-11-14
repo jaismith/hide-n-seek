@@ -154,10 +154,7 @@ class Navigation():
 
     def get_target(self, map, seen, curr_idx):
         """Return a target point (in odom) from the seen map, assuming unseen cells are marked as -1."""
-
-        # print "Finding target at {}".format(self.get_coords(curr_idx))
-
-        map = list(map)
+        map = self.expand(map)
         seen = list(seen)
         access = lambda i, j: map[self.get_id(i, j)]
         access_seen = lambda i, j: seen[self.get_id(i, j)]
@@ -198,14 +195,9 @@ class Navigation():
 
         return None
 
-    def bfs(self, map, curr_idx, tar_idx):
-        """Return a path from current point to target point."""
+    def expand(self, map):
         res = list(map)
-        access = lambda i, j: res[self.get_id(i, j)]
-        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-
-        # Change free cells within minimum distance from walls to walls.
-        walls = list(filter(lambda idx: res[idx] >= OBSTACLE_THRESHOLD_PROBABILITY, range(len(map))))
+        walls = list(filter(lambda idx: res[idx] >= OBSTACLE_THRESHOLD_PROBABILITY, range(len(res))))
         q = [self.get_coords(idx) for idx in walls]
         offset = self.offset
         while len(q) and offset > 0:
@@ -220,6 +212,16 @@ class Navigation():
                         new_q.append((nx, ny))
             q = new_q
             offset -= 1
+        return res
+
+    def bfs(self, map, curr_idx, tar_idx):
+        """Return a path from current point to target point."""
+        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+
+        # Change free cells within minimum distance from walls to walls.
+        res = self.expand(map)
+        access = lambda i, j: res[self.get_id(i, j)]
+
         # find a path from curr -> tar
         q = [self.get_coords(curr_idx)]
         parent = {curr_idx: -1}
