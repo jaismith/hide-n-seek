@@ -67,7 +67,8 @@ class Navigation():
         self._path_seq = 0
         self._map_metadata = None
         self._marker_array = MarkerArray()
-        self._directions = [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)]
+        # self._directions = [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)]
+        self._directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
 
     def _motion_callback(self, msg):
         # all points are in /odom, no need to transform
@@ -130,6 +131,10 @@ class Navigation():
 
         # wait until having heard from both map and movement
         if self._pos is None or self._seen is None: return []
+
+        # expand the map
+        grid = self.expand(grid)
+
         # # determine next target point from seen map
         target = self.get_target(grid, self._seen, self.to_grid_id(self._pos))
 
@@ -182,10 +187,6 @@ class Navigation():
 
         print 'Getting target'
 
-        res = self.expand(m)
-
-        print 'Expanded'
-
         seen = list(seen)
         access = lambda i, j: res[self.get_id(i, j)]
         access_seen = lambda i, j: seen[self.get_id(i, j)]
@@ -206,12 +207,6 @@ class Navigation():
                         reachable.add(nidx)
                         new_q.append((nx, ny))
             q = new_q
-
-        # cnt = 0
-        # for x in reachable:
-        #     cnt += 1
-        #
-        # print "Reachable: {}".format(cnt)
 
         frontiers = []
         # find frontiers
@@ -331,9 +326,8 @@ class Navigation():
     def bfs(self, m, curr_idx, tar_idx):
         """Return a path from current point to target point."""
         # Change free cells within minimum distance from walls to walls.
-        res = self.expand(m)
 
-        access = lambda i, j: res[self.get_id(i, j)]
+        access = lambda i, j: m[self.get_id(i, j)]
 
         # find a path from curr -> tar
         q = [self.get_coords(curr_idx)]
