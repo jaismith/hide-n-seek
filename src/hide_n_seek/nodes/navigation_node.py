@@ -11,7 +11,7 @@ import numpy as np
 # import of relevant libraries.
 import rospy # module for ROS APIs
 from tf.transformations import euler_from_quaternion, quaternion_from_euler, quaternion_matrix, translation_matrix
-from geometry_msgs.msg import PolygonStamped, Point32, PoseStamped # message type for cmd_vel
+from geometry_msgs.msg import PolygonStamped, Point32, PointStamped, PoseStamped # message type for cmd_vel
 from nav_msgs.msg import OccupancyGrid, Path
 from std_msgs.msg import Float32
 from hide_n_seek.msg import MotionStatus
@@ -27,7 +27,8 @@ EXPANDED_MAP_TOPIC1 = 'expanded1'
 EXPANDED_MAP_TOPIC2 = 'expanded2'
 MOTION_TOPIC = 'motion_status'   # current goal point published by movement node
 NAVIGATION_TOPIC = 'navigation_path' # topic the calculated path gets published to
-GOAL_TOPIC = 'object_angle' # topic
+GOAL_TOPIC = 'object_angle'
+GOAL_POSE_TOPIC = 'goal_pose'
 FRAME_ID = 'odom'   # the static reference frame
 DEFAULT_MARKER_TOPIC = 'visualization_marker'
 DEFAULT_MARKER_ARRAY_TOPIC = 'visualization_marker_array'
@@ -50,12 +51,13 @@ class Navigation():
         self._navigation_pub = rospy.Publisher(NAVIGATION_TOPIC, Path, queue_size=1)
         self._marker_pub = rospy.Publisher(DEFAULT_MARKER_TOPIC, Marker, queue_size=5)
         self._marker_array_pub = rospy.Publisher(DEFAULT_MARKER_ARRAY_TOPIC, MarkerArray, queue_size=100)
-        self._expanded_map_pub1 = rospy.Publisher(EXPANDED_MAP_TOPIC1, OccupancyGrid, queue_size=5)
-        self._expanded_map_pub2 = rospy.Publisher(EXPANDED_MAP_TOPIC2, OccupancyGrid, queue_size=5)
+        # self._expanded_map_pub1 = rospy.Publisher(EXPANDED_MAP_TOPIC1, OccupancyGrid, queue_size=5)
+        # self._expanded_map_pub2 = rospy.Publisher(EXPANDED_MAP_TOPIC2, OccupancyGrid, queue_size=5)
         # Setting up subscribers.
         self._map_sub = rospy.Subscriber(MAP_TOPIC, OccupancyGrid, self._map_callback, queue_size=1)
         self._motion_sub = rospy.Subscriber(MOTION_TOPIC, MotionStatus, self._motion_callback, queue_size=1)
-        self._goal_sub = rospy.Subscriber(GOAL_TOPIC, Float32, self._goal_callback, queue_size=1)
+        # self._goal_sub = rospy.Subscriber(GOAL_TOPIC, Float32, self._goal_callback, queue_size=1)
+        self._goal_pose_sub = rospy.Subscriber(GOAL_POSE_TOPIC, PointStamped, self._goal_pose_callback, queue_size=1)
 
         # Parameters.
         self.min_threshold_distance = min_threshold_distance
@@ -66,6 +68,7 @@ class Navigation():
         self._pos = None    # current position of the robot
         self._yaw = None
         self._goal_yaw = None   # a target yaw
+        self._goal = None
         self._path_seq = 0
         self._map_metadata = None
 
@@ -75,19 +78,25 @@ class Navigation():
         quat = msg.goal.orientation
         self._yaw = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])[-1]
 
-    def _goal_callback(self, msg):
+    # def _goal_callback(self, msg):
+    #     if self._pos is None:
+    #         return
+    #
+    #     print "Navigation: goal {}".format(msg.data)
+    #
+    #     goal_yaw = self._yaw + msg.data
+    #     if goal_yaw  > math.pi:
+    #         goal_yaw  = goal_yaw  - 2 * math.pi
+    #     elif self._goal < -math.pi:
+    #         goal_yaw  = goal_yaw  + 2 * math.pi
+    #
+    #     self._goal_yaw = goal_yaw
+    def _goal_pose_callback(self, msg):
         if self._pos is None:
             return
 
-        print "Navigation: goal {}".format(msg.data)
-
-        goal_yaw = self._yaw + msg.data
-        if goal_yaw  > math.pi:
-            goal_yaw  = goal_yaw  - 2 * math.pi
-        elif self._goal < -math.pi:
-            goal_yaw  = goal_yaw  + 2 * math.pi
-
-        self._goal_yaw = goal_yaw
+        self._goal = (msg.point.x, msg.point.y)
+        print "Navigation: goal {}".format(self._goal)
 
     def _map_callback(self, msg):
         self._map_metadata = msg.info
@@ -161,6 +170,9 @@ class Navigation():
 
     def get_target(self, m, seen, curr_idx):
         """Return a target point (in odom) from the seen map, assuming unseen cells are marked as -1."""
+        if self._goal is not None:
+            return self._goal
+
         res = self.expand(m)
 
         self._expanded_map_pub1.publish(self.to_occupancy_grid(res))
@@ -171,14 +183,14 @@ class Navigation():
         directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
 
         # goal is found, drive straight towards it
-        if self._goal_yaw is not None:
-            dx = self._map_resolution / 2
-            dy = dx * math.tan(self._goal_yaw)
-            x, y = list(self._pos)
-            while access(x, y) == 0:
-                x += dx
-                y += dy
-            return self.map_coords_to_odom((x - dx, y - dy))
+        # if self._goal_yaw is not None:
+        #     dx = self._map_resolution / 2
+        #     dy = dx * math.tan(self._goal_yaw)
+        #     x, y = list(self._pos)
+        #     while res[self.to_grid_id((x, y))] == 0:
+        #         x += dx
+        #         y += dy
+        #     return (x - dx, y - dy)
 
         # search for target if it's been found, otherwise the closest unseen cell
         search_for = -1
