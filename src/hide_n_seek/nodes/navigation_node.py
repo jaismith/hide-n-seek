@@ -128,14 +128,8 @@ class Navigation():
         self._path_seq += 1
         # path_msg.poses.append(to_pose(path[0], self._yaw))
 
-        # generate new marker array
-        marker_array = MarkerArray()
-
         for r in range(1, len(path)):
             path_msg.poses.append(to_pose(path[r], get_yaw(path[r - 1][0], path[r - 1][1], path[r][0], path[r][1])))
-            marker_array.markers.append(to_marker(path_msg.poses[-1]))
-
-        self._marker_array_pub.publish(marker_array)
 
         poses = [ extract_pose(pose) for pose in path_msg.poses]
         print poses
@@ -150,6 +144,9 @@ class Navigation():
         #             s += "{}, {}, {}".format(self.map_coords_to_odom((nx + r, ny + c)), access(nx + r, ny + c),
         #                                      access_seen(nx + r, ny + c)) + '\t'
         #         print s
+
+        self.mark(target)
+        self.mark_poses(path_msg.poses)
 
         print "Navigation: Path published."
         # publish the path to navigation
@@ -271,6 +268,37 @@ class Navigation():
         # [] -> unreachable, otherwise a path from curr to tar
         return path
 
+    def mark_poses(self, poses):
+        marker_array = MarkerArray()
+
+        for pose in poses:
+            marker_array.markers.append(to_marker(pose))
+
+        self._marker_array_pub.publish(marker_array)
+
+    def mark(self, target):
+        marker_msg = Marker()
+        # header
+        marker_msg.header.frame_id = FRAME_ID
+        marker_msg.header.stamp = rospy.Time.now()
+        marker_msg.id = 0
+        marker_msg.ns = "nav"
+        # marker appearance
+        marker_msg.type = Marker.CIRCLE
+        marker_msg.scale.x = 0.5
+        marker_msg.scale.y = 0.5
+        marker_msg.scale.z = 0.5
+        marker_msg.color.r = 0.0
+        marker_msg.color.g = 1.0
+        marker_msg.color.b = 0.0
+        marker_msg.color.a = 1.0
+        marker_msg.action = Marker.ADD
+        marker_msg.pose.position.x = target[0]
+        marker_msg.pose.position.y = target[1]
+        marker_msg.pose.position.z = 0.5
+        marker_msg.pose.orientation.w = 1.0
+
+        self._marker_pub.publish(marker_msg)
 
     def to_grid_id(self, pt):
         """Translate a pair of coords in odom to an id in an 1D array."""
