@@ -34,7 +34,6 @@ OBSTACLE_THRESHOLD_PROBABILITY = 0.2    # cells on grid with probability greater
 TARGET_VALUE = -50          # special value used to mark the target on the seen map
 
 pose_seq = 0
-path_seq = 0
 
 class Navigation():
     def __init__(self, min_threshold_distance = MIN_THRESHOLD_DISTANCE):
@@ -56,6 +55,8 @@ class Navigation():
         self._pos = None    # current position of the robot
         self._yaw = None
         self._goal = None   # a target yaw
+
+        self._path_seq = 0
 
     def _motion_callback(self, msg):
         # all points are in /odom, no need to transform
@@ -117,9 +118,9 @@ class Navigation():
         # format message using generated path
         path_msg = Path()
         path_msg.header.frame_id = FRAME_ID
-        path_msg.header.seq = path_seq
+        path_msg.header.seq = self._path_seq
         path_msg.header.stamp = rospy.Time.now()
-        path_seq += 1
+        self._path_seq += 1
         # path_msg.poses.append(to_pose(path[0], self._yaw))
 
         for r in range(1, len(path)):
