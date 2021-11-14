@@ -23,6 +23,8 @@ RELEASE = True
 # Topic names
 # assuming both maps have same params, and target object will be marked with a special value on seen map
 MAP_TOPIC = 'map_combined' if RELEASE else 'map' # name of topic for calculated occupancy grid
+EXPANDED_MAP_TOPIC1 = 'expanded1'
+EXPANDED_MAP_TOPIC2 = 'expanded2'
 MOTION_TOPIC = 'motion_status'   # current goal point published by movement node
 NAVIGATION_TOPIC = 'navigation_path' # topic the calculated path gets published to
 GOAL_TOPIC = 'object_angle' # topic
@@ -48,6 +50,8 @@ class Navigation():
         self._navigation_pub = rospy.Publisher(NAVIGATION_TOPIC, Path, queue_size=1)
         self._marker_pub = rospy.Publisher(DEFAULT_MARKER_TOPIC, Marker, queue_size=5)
         self._marker_array_pub = rospy.Publisher(DEFAULT_MARKER_ARRAY_TOPIC, MarkerArray, queue_size=100)
+        self._expanded_map_pub1 = rospy.Publisher(EXPANDED_MAP_TOPIC1, Marker, queue_size=5)
+        self._expanded_map_pub2 = rospy.Publisher(EXPANDED_MAP_TOPIC2, Marker, queue_size=5)
         # Setting up subscribers.
         self._map_sub = rospy.Subscriber(MAP_TOPIC, OccupancyGrid, self._map_callback, queue_size=1)
         self._motion_sub = rospy.Subscriber(MOTION_TOPIC, MotionStatus, self._motion_callback, queue_size=1)
@@ -63,6 +67,7 @@ class Navigation():
         self._yaw = None
         self._goal_yaw = None   # a target yaw
         self._path_seq = 0
+        self._map_metadata = None
 
     def _motion_callback(self, msg):
         # all points are in /odom, no need to transform
@@ -154,6 +159,9 @@ class Navigation():
     def get_target(self, m, seen, curr_idx):
         """Return a target point (in odom) from the seen map, assuming unseen cells are marked as -1."""
         res = self.expand(m)
+
+        self._expanded_map_pub1.publish(res)
+
         seen = list(seen)
         access = lambda i, j: res[self.get_id(i, j)]
         access_seen = lambda i, j: seen[self.get_id(i, j)]
@@ -228,6 +236,9 @@ class Navigation():
 
         # Change free cells within minimum distance from walls to walls.
         res = self.expand(m)
+
+        self._expanded_map_pub2.publish(res)
+
         access = lambda i, j: res[self.get_id(i, j)]
 
         # find a path from curr -> tar
@@ -277,6 +288,15 @@ class Navigation():
 
         # [] -> unreachable, otherwise a path from curr to tar
         return path
+
+    def to_occupancy_grid(self, m):
+        grid_msg = OccupancyGrid()
+        grid_msg.header.frame_id = FRAME_ID
+        grid_msg.header.stamp = rospy.Time.now()
+        grid_msg.info = self._map_metadata
+        grid_msg.data = m
+
+        return grid_msg
 
     def mark_poses(self, poses):
         marker_array = MarkerArray()
