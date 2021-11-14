@@ -322,7 +322,7 @@ def to_marker(pose):
     marker_msg.color.a = 1.0
 
     marker_msg.action = Marker.ADD
-    marker_msg.pose = pose
+    marker_msg.pose = pose.pose
 
     return marker_msg
 

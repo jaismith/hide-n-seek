@@ -29,7 +29,7 @@ LASER_FRAME = 'base_laser_link'
 SCAN_ANGLE_OFFSET = 0
 
 motion = Motion(linear_vel=0.2, angular_vel=math.pi / 4)
-mapper = Mapper(default_scan_topic=DEFAULT_SCAN_TOPIC,
+mapper = Mapper(scan_topic=DEFAULT_SCAN_TOPIC,
   laser_frame=LASER_FRAME,
   scan_angle_offset=SCAN_ANGLE_OFFSET)
 navigation = Navigation()
