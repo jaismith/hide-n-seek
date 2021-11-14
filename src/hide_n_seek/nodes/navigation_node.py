@@ -71,6 +71,7 @@ class Navigation():
         self._goal = None
         self._path_seq = 0
         self._map_metadata = None
+        self._marker_array = MarkerArray()
 
     def _motion_callback(self, msg):
         # all points are in /odom, no need to transform
@@ -314,11 +315,17 @@ class Navigation():
         return grid_msg
 
     def mark_poses(self, poses):
+        # unmark previous markers first
+        for marker in self._marker_array.markers:
+            marker.action = Marker.DELETE
+        self._marker_array_pub.publish(self._marker_array)
+
         marker_array = MarkerArray()
 
         for pose in poses:
             marker_array.markers.append(to_marker(pose))
 
+        self._marker_array = marker_array
         self._marker_array_pub.publish(marker_array)
 
     def mark(self, target):
