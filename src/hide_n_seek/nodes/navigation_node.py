@@ -35,7 +35,7 @@ DEFAULT_MARKER_ARRAY_TOPIC = 'visualization_marker_array'
 FREQUENCY = 10 #Hz.
 
 # Threshold of minimum clearance distance from the obstacles
-MIN_THRESHOLD_DISTANCE = 0.5 # m, threshold distance, should be smaller than range_max
+MIN_THRESHOLD_DISTANCE = 0.2 # m, threshold distance, should be smaller than range_max
 OBSTACLE_THRESHOLD_PROBABILITY = 0.2    # cells on grid with probability greater than this will be treated as obstacles
 TARGET_VALUE = -50          # special value used to mark the target on the seen map
 
@@ -50,8 +50,8 @@ class Navigation():
         self._navigation_pub = rospy.Publisher(NAVIGATION_TOPIC, Path, queue_size=1)
         self._marker_pub = rospy.Publisher(DEFAULT_MARKER_TOPIC, Marker, queue_size=5)
         self._marker_array_pub = rospy.Publisher(DEFAULT_MARKER_ARRAY_TOPIC, MarkerArray, queue_size=100)
-        self._expanded_map_pub1 = rospy.Publisher(EXPANDED_MAP_TOPIC1, Marker, queue_size=5)
-        self._expanded_map_pub2 = rospy.Publisher(EXPANDED_MAP_TOPIC2, Marker, queue_size=5)
+        self._expanded_map_pub1 = rospy.Publisher(EXPANDED_MAP_TOPIC1, OccupancyGrid, queue_size=5)
+        self._expanded_map_pub2 = rospy.Publisher(EXPANDED_MAP_TOPIC2, OccupancyGrid, queue_size=5)
         # Setting up subscribers.
         self._map_sub = rospy.Subscriber(MAP_TOPIC, OccupancyGrid, self._map_callback, queue_size=1)
         self._motion_sub = rospy.Subscriber(MOTION_TOPIC, MotionStatus, self._motion_callback, queue_size=1)
@@ -88,6 +88,7 @@ class Navigation():
         self._goal_yaw = goal_yaw
 
     def _map_callback(self, msg):
+        self._map_metadata = msg.info
         self._map_width = msg.info.width
         self._map_height = msg.info.height
         self._map_resolution = msg.info.resolution
@@ -160,7 +161,7 @@ class Navigation():
         """Return a target point (in odom) from the seen map, assuming unseen cells are marked as -1."""
         res = self.expand(m)
 
-        self._expanded_map_pub1.publish(res)
+        self._expanded_map_pub1.publish(self.to_occupancy_grid(res))
 
         seen = list(seen)
         access = lambda i, j: res[self.get_id(i, j)]
@@ -237,7 +238,7 @@ class Navigation():
         # Change free cells within minimum distance from walls to walls.
         res = self.expand(m)
 
-        self._expanded_map_pub2.publish(res)
+        self._expanded_map_pub2.publish(self.to_occupancy_grid(res))
 
         access = lambda i, j: res[self.get_id(i, j)]
 
