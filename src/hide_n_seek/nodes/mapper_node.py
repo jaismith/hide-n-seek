@@ -32,7 +32,7 @@ GRID_RESOLUTION = 0.1  # cell size, m
 LASER_FRAME = 'laser'  # for the simulation, it's 'base_laser_link'
 CAMERA_FOV = pi / 3  # horizontal field of view of the camera, 60 degrees for the ROSBot
 SCAN_ANGLE_OFFSET = pi  # pi for the ROSBot which has laser scan angles offset by pi from the simulations
-OBJECT_THRESHOLD = 0.8  # probability threshold for the object to be detected when looking for the goal pose
+OBJECT_THRESHOLD = 0.2  # probability threshold for the object to be detected when looking for the goal pose
 
 
 # static function, calculate a probability value for the occupancy grid message given log odds
