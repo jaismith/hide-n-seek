@@ -190,25 +190,73 @@ class Navigation():
         access = lambda i, j: m[self.get_id(i, j)]
         access_seen = lambda i, j: seen[self.get_id(i, j)]
 
-        # gather all the reachable nodes
-        q = [self.get_coords(curr_idx)]
-        reachable = set()
-        reachable.add(curr_idx)
-        while len(q):
-            new_q = []
-            for coords in q:
-                for dir in self._directions:
-                    nx = coords[0] + dir[0]
-                    ny = coords[1] + dir[1]
-                    nidx = self.get_id(nx, ny)
-                    # only rewrite new coord that is in bound and free,
-                    if self.in_bound(nx, ny) and nidx not in reachable and access(nx, ny) == 0:
-                        reachable.add(nidx)
-                        new_q.append((nx, ny))
-            q = new_q
+        # # gather all the reachable nodes
+        # q = [self.get_coords(curr_idx)]
+        # reachable = set()
+        # reachable.add(curr_idx)
+        # while len(q):
+        #     new_q = []
+        #     for coords in q:
+        #         for dir in self._directions:
+        #             nx = coords[0] + dir[0]
+        #             ny = coords[1] + dir[1]
+        #             nidx = self.get_id(nx, ny)
+        #             # only rewrite new coord that is in bound and free,
+        #             if self.in_bound(nx, ny) and nidx not in reachable and access(nx, ny) == 0:
+        #                 reachable.add(nidx)
+        #                 new_q.append((nx, ny))
+        #     q = new_q
+        #
+        # frontiers = []
+        # # find frontiers
+        # # go towards the target
+        # q = [self.get_coords(curr_idx)]
+        # visited = set()
+        # visited.add(curr_idx)
+        #
+        # while len(q):
+        #     new_q = []
+        #     for coords in q:
+        #         for dir in self._directions:
+        #             nx = coords[0] + dir[0]
+        #             ny = coords[1] + dir[1]
+        #             nidx = self.get_id(nx, ny)
+        #
+        #             if not self.in_bound(nx, ny):
+        #                 continue
+        #
+        #             # found an unseen node, explore
+        #             if access_seen(nx, ny) == -1:
+        #                 visited.add(nidx)
+        #                 frontier = self.explore_frontier(nx, ny, visited, reachable, seen)
+        #                 # print "frontier len: {}".format(len(frontier))
+        #                 frontiers.append(frontier)
+        #
+        #             # otherwise only expand free cells
+        #             elif access(nx, ny) == 0 and nidx not in visited:
+        #                 visited.add(nidx)
+        #                 new_q.append((nx, ny))
+        #     q = new_q
+        #
+        # # selected the biggest frontier
+        # if len(frontiers) == 0:
+        #     print "Unable to find a frontier"
+        #     return None
+        #
+        # length = 0
+        # fr = []
+        # for frontier in frontiers:
+        #     if len(frontier) > length:
+        #         length = len(frontier)
+        #         fr = frontier
+        #
+        # print 'Max frontier: {}'.format(len(fr))
+        # # # return the midpoint in the selected frontier (not quite)
+        # # return self.map_coords_to_odom(fr[int(len(fr) * random())])
+        # return self.map_coords_to_odom(fr[len(fr) / 2])
 
-        frontiers = []
-        # find frontiers
+        # search for target if it's been found, otherwise the closest unseen cell
+        search_for = -1
         # go towards the target
         q = [self.get_coords(curr_idx)]
         visited = set()
@@ -225,37 +273,16 @@ class Navigation():
                     if not self.in_bound(nx, ny):
                         continue
 
-                    # found an unseen node, explore
-                    if access_seen(nx, ny) == -1:
-                        visited.add(nidx)
-                        frontier = self.explore_frontier(nx, ny, visited, reachable, seen)
-                        # print "frontier len: {}".format(len(frontier))
-                        frontiers.append(frontier)
-
-                    # otherwise only expand free cells
-                    elif access(nx, ny) == 0 and nidx not in visited:
+                    # target found
+                    if access_seen(nx, ny) == search_for:
+                        return self.map_coords_to_odom((nx, ny))
+                    # only expand the free cells
+                    if access(nx, ny) == 0 and nidx not in visited:
                         visited.add(nidx)
                         new_q.append((nx, ny))
             q = new_q
 
-        # selected the biggest frontier
-        if len(frontiers) == 0:
-            print "Unable to find a frontier"
-            return None
-
-        length = 0
-        fr = []
-        for frontier in frontiers:
-            if len(frontier) > length:
-                length = len(frontier)
-                fr = frontier
-
-
-
-        print 'Max frontier: {}'.format(len(fr))
-        # # return the midpoint in the selected frontier (not quite)
-        # return self.map_coords_to_odom(fr[int(len(fr) * random())])
-        return self.map_coords_to_odom(fr[len(fr) / 2])
+        return None
 
     def explore_frontier(self, x, y, visited, reachable, seen):
         access_seen = lambda i, j: seen[self.get_id(i, j)]
