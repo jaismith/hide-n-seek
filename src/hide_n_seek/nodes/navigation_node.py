@@ -299,7 +299,7 @@ class Navigation():
                 ny = y + dy
                 nidx = self.get_id(nx, ny)
                 # skip current, seen points, and visited points
-                if (dx == 0 and dy == 0) or not self.in_bound(nx, ny) or visited.contains(nidx) or access_seen(nx, ny) != -1:
+                if (dx == 0 and dy == 0) or not self.in_bound(nx, ny) or nidx in visited or access_seen(nx, ny) != -1:
                     continue
 
                 is_reachable = False
@@ -307,7 +307,7 @@ class Navigation():
                     nnx = nx + dir[0]
                     nny = ny + dir[1]
                     nnidx = self.get_id(nnx, nny)
-                    if self.in_bound(nnx, nny) and reachable.contains(nnidx):
+                    if self.in_bound(nnx, nny) and nnidx in reachable:
                         is_reachable = True
                         break
                 if is_reachable:
