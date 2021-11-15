@@ -31,6 +31,8 @@ DEFAULT_MARKER_ARRAY_TOPIC = 'visualization_marker_array'
 # Frequency at which the loop operates
 FREQUENCY = 10 #Hz.
 
+FRONTIER_NAVIGATION = True
+
 # Threshold of minimum clearance distance from the obstacles
 MIN_THRESHOLD_DISTANCE = 0.2 # m, threshold distance, should be smaller than range_max
 OBSTACLE_THRESHOLD_PROBABILITY = 0.2    # cells on grid with probability greater than this will be treated as obstacles
@@ -40,7 +42,7 @@ pose_seq = 0
 marker_id = 0
 
 class Navigation():
-    def __init__(self, min_threshold_distance = MIN_THRESHOLD_DISTANCE):
+    def __init__(self, min_threshold_distance = MIN_THRESHOLD_DISTANCE, frontier_navigation = FRONTIER_NAVIGATION):
         """Constructor."""
         # # Setting up publishers/subscribers.
         # Setting up the publishers.
@@ -55,6 +57,7 @@ class Navigation():
 
 
         # Parameters.
+        self.frontier_navigation = frontier_navigation
         self.min_threshold_distance = min_threshold_distance
         self._map_width = None
         self._map_height = None
@@ -67,13 +70,18 @@ class Navigation():
         self._path_seq = 0
         self._map_metadata = None
         self._marker_array = MarkerArray()
-        # self._directions = [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)]
-        self._directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        self._directions = [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)]
+        self._state = None
+        # self._directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
 
     def _motion_callback(self, msg):
         # all points are in /odom, no need to transform
         self._pos = (msg.goal.position.x, msg.goal.position.y)
         quat = msg.goal.orientation
+        self._state = msg.state
+
+        # print 'Got state: {}'.format(msg.state)
+
         self._yaw = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])[-1]
 
     def _goal_callback(self, msg):
@@ -109,82 +117,61 @@ class Navigation():
         self.get_id = lambda i, j: i + j * self._map_width
         self.in_bound = lambda i, j: 0 <= i < self._map_width and 0 <= j < self._map_height
         self.odom_to_map = lambda pt: (pt[0] - msg.info.origin.position.x, pt[1] - msg.info.origin.position.y)
-        # self.map_coords_to_odom = lambda pt: (pt[0] * self._map_resolution + msg.info.origin.position.x, pt[1] * self._map_resolution + msg.info.origin.position.y)
         self.map_coords_to_odom = lambda pt: (round(pt[0] * self._map_resolution + msg.info.origin.position.x, 2), round(pt[1] * self._map_resolution + msg.info.origin.position.y, 2))
-        self._seen = msg.data[len(msg.data) / 2:]
-        # print "Seen map received"
 
-        grid = msg.data[:len(msg.data) / 2]
-        grid = [-1 if prob < 0 else 1 if prob > OBSTACLE_THRESHOLD_PROBABILITY else 0 for prob in grid]
+        if self._state == 'WAIT':
+            self._seen = msg.data[len(msg.data) / 2:]
 
-        # textfile = open("map.txt", "w")
-        # for element in grid:
-        #     textfile.write(str(element) + ",")
-        # textfile.close()
-        # textfile = open("seen.txt", "w")
-        # for element in self._seen:
-        #     textfile.write(str(element) + ",")
-        # textfile.close()
+            grid = msg.data[:len(msg.data) / 2]
+            grid = [-1 if prob < 0 else 1 if prob > OBSTACLE_THRESHOLD_PROBABILITY else 0 for prob in grid]
 
-        # mark the obstacles based on
-        grid = [0 if 0 <= prob < OBSTACLE_THRESHOLD_PROBABILITY else 1 for prob in grid]
-        self._pos = (0, 0)
-        self._yaw = 0
+            # mark the obstacles based on
+            grid = [0 if 0 <= prob < OBSTACLE_THRESHOLD_PROBABILITY else 1 for prob in grid]
+            self._pos = (0, 0)
+            self._yaw = 0
 
-        # wait until having heard from both map and movement
-        if self._pos is None or self._seen is None: return []
+            # wait until having heard from both map and movement
+            if self._pos is None or self._seen is None: return []
 
-        # expand the map
-        grid = self.expand(grid)
+            # expand the map
+            grid = self.expand(grid)
 
-        # # determine next target point from seen map
-        target = self.get_target(grid, self._seen, self.to_grid_id(self._pos))
+            # # determine next target point from seen map
+            target = self.get_target(grid, self._seen, self.to_grid_id(self._pos))
 
-        print "Got target: {}".format(target)
+            print "Got target: {}".format(target)
 
-        if target is None:
-            print "Naviagtion: Can't find a target"
-            return
+            if target is None:
+                print "Naviagtion: Can't find a target"
+                return
 
-        path = self.bfs(grid, self.to_grid_id(self._pos), self.to_grid_id(target))
+            path = self.bfs(grid, self.to_grid_id(self._pos), self.to_grid_id(target))
 
-        # print path
+            # print path
 
-        # format message using generated path
-        path_msg = Path()
-        path_msg.header.frame_id = FRAME_ID
-        path_msg.header.seq = self._path_seq
-        path_msg.header.stamp = rospy.Time.now()
-        self._path_seq += 1
-        # path_msg.poses.append(to_pose(path[0], self._yaw))
+            # format message using generated path
+            path_msg = Path()
+            path_msg.header.frame_id = FRAME_ID
+            path_msg.header.seq = self._path_seq
+            path_msg.header.stamp = rospy.Time.now()
+            self._path_seq += 1
 
-        for r in range(1, len(path)):
-            path_msg.poses.append(to_pose(path[r], get_yaw(path[r - 1][0], path[r - 1][1], path[r][0], path[r][1])))
+            for r in range(1, len(path)):
+                path_msg.poses.append(to_pose(path[r], get_yaw(path[r - 1][0], path[r - 1][1], path[r][0], path[r][1])))
 
-        poses = [ extract_pose(pose) for pose in path_msg.poses]
+            poses = [ extract_pose(pose) for pose in path_msg.poses]
 
-        if len(poses) == 1:
-            print(path_msg.poses[0])
+            if len(poses) == 1:
+                print(path_msg.poses[0])
 
-        print poses
+            print poses
 
-        # if len(poses) == 0:
-        #     side = 5
-        #
-        #     for r in range(-side / 2, side / 2 + 1):
-        #         s = ''
-        #         nx, ny = target
-        #         for c in range(-side / 2, side / 2 + 1):
-        #             s += "{}, {}, {}".format(self.map_coords_to_odom((nx + r, ny + c)), access(nx + r, ny + c),
-        #                                      access_seen(nx + r, ny + c)) + '\t'
-        #         print s
+            self.mark(target)
+            # self.mark_poses(path_msg.poses)
 
-        self.mark(target)
-        # self.mark_poses(path_msg.poses)
-
-        print "Navigation: Path published."
-        # publish the path to navigation
-        self._navigation_pub.publish(path_msg)
+            print "Navigation: Path published."
+            # publish the path to navigation
+            self._navigation_pub.publish(path_msg)
 
     def get_target(self, m, seen, curr_idx):
         """Return a target point (in odom) from the seen map, assuming unseen cells are marked as -1."""
@@ -211,99 +198,100 @@ class Navigation():
         access = lambda i, j: m[self.get_id(i, j)]
         access_seen = lambda i, j: seen[self.get_id(i, j)]
 
-        # # gather all the reachable nodes
-        # q = [self.get_coords(curr_idx)]
-        # reachable = set()
-        # reachable.add(curr_idx)
-        # while len(q):
-        #     new_q = []
-        #     for coords in q:
-        #         for dir in self._directions:
-        #             nx = coords[0] + dir[0]
-        #             ny = coords[1] + dir[1]
-        #             nidx = self.get_id(nx, ny)
-        #             # only rewrite new coord that is in bound and free,
-        #             if self.in_bound(nx, ny) and nidx not in reachable and access(nx, ny) == 0:
-        #                 reachable.add(nidx)
-        #                 new_q.append((nx, ny))
-        #     q = new_q
-        #
-        # frontiers = []
-        # # find frontiers
-        # # go towards the target
-        # q = [self.get_coords(curr_idx)]
-        # visited = set()
-        # visited.add(curr_idx)
-        #
-        # while len(q):
-        #     new_q = []
-        #     for coords in q:
-        #         for dir in self._directions:
-        #             nx = coords[0] + dir[0]
-        #             ny = coords[1] + dir[1]
-        #             nidx = self.get_id(nx, ny)
-        #
-        #             if not self.in_bound(nx, ny):
-        #                 continue
-        #
-        #             # found an unseen node, explore
-        #             if access_seen(nx, ny) == -1:
-        #                 visited.add(nidx)
-        #                 frontier = self.explore_frontier(nx, ny, visited, reachable, seen)
-        #                 # print "frontier len: {}".format(len(frontier))
-        #                 frontiers.append(frontier)
-        #
-        #             # otherwise only expand free cells
-        #             elif access(nx, ny) == 0 and nidx not in visited:
-        #                 visited.add(nidx)
-        #                 new_q.append((nx, ny))
-        #     q = new_q
-        #
-        # # selected the biggest frontier
-        # if len(frontiers) == 0:
-        #     print "Unable to find a frontier"
-        #     return None
-        #
-        # length = 0
-        # fr = []
-        # for frontier in frontiers:
-        #     if len(frontier) > length:
-        #         length = len(frontier)
-        #         fr = frontier
-        #
-        # print 'Max frontier: {}'.format(len(fr))
-        # # # return the midpoint in the selected frontier (not quite)
-        # # return self.map_coords_to_odom(fr[int(len(fr) * random())])
-        # return self.map_coords_to_odom(fr[len(fr) / 2])
+        if self.frontier_navigation:
+            # gather all the reachable nodes
+            q = [self.get_coords(curr_idx)]
+            reachable = set()
+            reachable.add(curr_idx)
+            while len(q):
+                new_q = []
+                for coords in q:
+                    for dir in self._directions:
+                        nx = coords[0] + dir[0]
+                        ny = coords[1] + dir[1]
+                        nidx = self.get_id(nx, ny)
+                        # only rewrite new coord that is in bound and free,
+                        if self.in_bound(nx, ny) and nidx not in reachable and access(nx, ny) == 0:
+                            reachable.add(nidx)
+                            new_q.append((nx, ny))
+                q = new_q
 
-        # search for target if it's been found, otherwise the closest unseen cell
-        search_for = -1
-        # go towards the target
-        q = [self.get_coords(curr_idx)]
-        visited = set()
-        visited.add(curr_idx)
+            frontiers = []
+            # find frontiers
+            # go towards the target
+            q = [self.get_coords(curr_idx)]
+            visited = set()
+            visited.add(curr_idx)
 
-        while len(q):
-            new_q = []
-            for coords in q:
-                for dir in self._directions:
-                    nx = coords[0] + dir[0]
-                    ny = coords[1] + dir[1]
-                    nidx = self.get_id(nx, ny)
+            while len(q):
+                new_q = []
+                for coords in q:
+                    for dir in self._directions:
+                        nx = coords[0] + dir[0]
+                        ny = coords[1] + dir[1]
+                        nidx = self.get_id(nx, ny)
 
-                    if not self.in_bound(nx, ny):
-                        continue
+                        if not self.in_bound(nx, ny):
+                            continue
 
-                    # target found
-                    if access_seen(nx, ny) == search_for:
-                        return self.map_coords_to_odom((nx, ny))
-                    # only expand the free cells
-                    if access(nx, ny) == 0 and nidx not in visited:
-                        visited.add(nidx)
-                        new_q.append((nx, ny))
-            q = new_q
+                        # found an unseen node, explore
+                        if access_seen(nx, ny) == -1:
+                            visited.add(nidx)
+                            frontier = self.explore_frontier(nx, ny, visited, reachable, seen)
+                            # print "frontier len: {}".format(len(frontier))
+                            frontiers.append(frontier)
 
-        return None
+                        # otherwise only expand free cells
+                        elif access(nx, ny) == 0 and nidx not in visited:
+                            visited.add(nidx)
+                            new_q.append((nx, ny))
+                q = new_q
+
+            # selected the biggest frontier
+            if len(frontiers) == 0:
+                print "Unable to find a frontier"
+                return None
+
+            length = 0
+            fr = []
+            for frontier in frontiers:
+                if len(frontier) > length:
+                    length = len(frontier)
+                    fr = frontier
+
+            print 'Max frontier: {}'.format(len(fr))
+            # # return the midpoint in the selected frontier (not quite)
+            # return self.map_coords_to_odom(fr[int(len(fr) * random())])
+            return self.map_coords_to_odom(fr[len(fr) / 2])
+        else:
+            # search for target if it's been found, otherwise the closest unseen cell
+            search_for = -1
+            # go towards the target
+            q = [self.get_coords(curr_idx)]
+            visited = set()
+            visited.add(curr_idx)
+
+            while len(q):
+                new_q = []
+                for coords in q:
+                    for dir in self._directions:
+                        nx = coords[0] + dir[0]
+                        ny = coords[1] + dir[1]
+                        nidx = self.get_id(nx, ny)
+
+                        if not self.in_bound(nx, ny):
+                            continue
+
+                        # target found
+                        if access_seen(nx, ny) == search_for:
+                            return self.map_coords_to_odom((nx, ny))
+                        # only expand the free cells
+                        if access(nx, ny) == 0 and nidx not in visited:
+                            visited.add(nidx)
+                            new_q.append((nx, ny))
+                q = new_q
+
+            return None
 
     def explore_frontier(self, x, y, visited, reachable, seen):
         access_seen = lambda i, j: seen[self.get_id(i, j)]
