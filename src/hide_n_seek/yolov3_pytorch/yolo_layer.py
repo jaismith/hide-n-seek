@@ -74,7 +74,6 @@ class YoloLayer(nn.Module):
             box = [i.item() for i in box]
 
             batch = math.floor(ind/(nA*nH*nW))
-
             all_boxes[batch].append(box)
 
         return all_boxes
