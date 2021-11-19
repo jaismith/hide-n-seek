@@ -7,14 +7,14 @@ FREQUENCY = 10
 
 class AnglePublisher():
     def __init__(self):
-        self.path = './object_angle.txt'
-        self.angle_pub = rospy.Publisher('object_angle', Vector3Stamped, queue_size=1)
+        self.path = './object_angle.txt' # listening for this file
+        self.angle_pub = rospy.Publisher('object_angle', Vector3Stamped, queue_size=1) # publisher
 
     def pub(self):
         rate = rospy.Rate(FREQUENCY)
         while not rospy.is_shutdown():
             if os.path.exists(self.path):
-                with open(self.path, 'r') as f:
+                with open(self.path, 'r') as f: # if the file exists then publish it as a vector 3 stamped message
                     line = f.readline()
                     line = line.split(' ')
                     if len(line) > 0:
@@ -28,11 +28,11 @@ class AnglePublisher():
 
     def destroy(self):
         if os.path.exists(self.path):
-            os.remove(self.path)
+            os.remove(self.path) # remove file so that next iteration is not influenced by old data
 
 
 if __name__ == "__main__":
-    rospy.init_node('angle_publisher')
+    rospy.init_node('angle_publisher') # create node on robot
     angle_publisher = AnglePublisher()
     rospy.sleep(2)
     # rospy.on_shutdown(angle_publisher.destroy)
