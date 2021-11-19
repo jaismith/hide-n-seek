@@ -6,8 +6,6 @@
 
 # Import of python modules.
 import math
-import numpy as np
-from random import random
 
 # import of relevant libraries.
 import rospy # module for ROS APIs
@@ -27,7 +25,6 @@ GOAL_TOPIC = 'object_angle'
 GOAL_POSE_TOPIC = 'goal_pose'
 FRAME_ID = 'odom'   # the static reference frame
 DEFAULT_MARKER_TOPIC = 'visualization_marker'
-DEFAULT_MARKER_ARRAY_TOPIC = 'visualization_marker_array'
 # Frequency at which the loop operates
 FREQUENCY = 10 #Hz.
 
@@ -48,12 +45,10 @@ class Navigation():
         # Setting up the publishers.
         self._navigation_pub = rospy.Publisher(NAVIGATION_TOPIC, Path, queue_size=1)
         self._marker_pub = rospy.Publisher(DEFAULT_MARKER_TOPIC, Marker, queue_size=5)
-        self._marker_array_pub = rospy.Publisher(DEFAULT_MARKER_ARRAY_TOPIC, MarkerArray, queue_size=100)
         # Setting up subscribers.
         self._map_sub = rospy.Subscriber(MAP_TOPIC, OccupancyGrid, self._map_callback, queue_size=1)
         self._motion_sub = rospy.Subscriber(MOTION_TOPIC, MotionStatus, self._motion_callback, queue_size=1)
         self._goal_sub = rospy.Subscriber(GOAL_TOPIC, Vector3Stamped, self._goal_callback, queue_size=1)
-        # self._goal_pose_sub = rospy.Subscriber(GOAL_POSE_TOPIC, PointStamped, self._goal_pose_callback, queue_size=1)
 
 
         # Parameters.
@@ -72,24 +67,23 @@ class Navigation():
         self._marker_array = MarkerArray()
         self._directions = [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)]
         self._state = None
-        # self._directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
 
     def _motion_callback(self, msg):
+        """Save the state and movement goal information received from the motion node for later planning. """
         # all points are in /odom, no need to transform
         self._pos = (msg.goal.position.x, msg.goal.position.y)
         quat = msg.goal.orientation
         self._state = msg.state
-
-        # print 'Got state: {}'.format(msg.state)
-
         self._yaw = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])[-1]
 
     def _goal_callback(self, msg):
+        """Save the goal information received from the object detection node."""
         if self._pos is None:
             return
 
         print "Navigation: goal {}".format(msg.x / math.pi * 180)
 
+        # format the final yaw
         goal_yaw = self._yaw + msg.x
         if goal_yaw  > math.pi:
             goal_yaw  = goal_yaw  - 2 * math.pi
@@ -98,45 +92,40 @@ class Navigation():
 
         self._goal_yaw = goal_yaw
 
-
-    # def _goal_pose_callback(self, msg):
-    #     if self._pos is None:
-    #         return
-    #
-    #     self._goal = (msg.point.x, msg.point.y)
-    #     print "Navigation: goal {}".format(self._goal)
-
     def _map_callback(self, msg):
+        """Handler for messages received from the mapper node. """
+
+        # save the metadata every time as the map can expand
         self._map_metadata = msg.info
         self._map_width = msg.info.width
         self._map_height = msg.info.height
         self._map_resolution = msg.info.resolution
-        # util funcs
+        # # util funcs
         self.offset = int(MIN_THRESHOLD_DISTANCE / self._map_resolution)  # the number of cells away from a wall
         self.get_coords = lambda id: (id % self._map_width, id / self._map_width)
         self.get_id = lambda i, j: i + j * self._map_width
         self.in_bound = lambda i, j: 0 <= i < self._map_width and 0 <= j < self._map_height
+        # transformations
         self.odom_to_map = lambda pt: (pt[0] - msg.info.origin.position.x, pt[1] - msg.info.origin.position.y)
         self.map_coords_to_odom = lambda pt: (round(pt[0] * self._map_resolution + msg.info.origin.position.x, 2), round(pt[1] * self._map_resolution + msg.info.origin.position.y, 2))
 
+        # only calculate new paths when the robot is sitting idle
         if self._state == 'WAIT':
+            # the map and seen map are stacked together - extract both
             self._seen = msg.data[len(msg.data) / 2:]
-
             grid = msg.data[:len(msg.data) / 2]
             grid = [-1 if prob < 0 else 1 if prob > OBSTACLE_THRESHOLD_PROBABILITY else 0 for prob in grid]
 
-            # mark the obstacles based on
+            # mark the obstacles based on the probability threshold
             grid = [0 if 0 <= prob < OBSTACLE_THRESHOLD_PROBABILITY else 1 for prob in grid]
-            self._pos = (0, 0)
-            self._yaw = 0
 
             # wait until having heard from both map and movement
             if self._pos is None or self._seen is None: return []
 
-            # expand the map
+            # preprocess the map to prevent paths from running too close to obstacles
             grid = self.expand(grid)
 
-            # # determine next target point from seen map
+            # determine next target point from seen map
             target = self.get_target(grid, self._seen, self.to_grid_id(self._pos))
 
             print "Got target: {}".format(target)
@@ -144,10 +133,8 @@ class Navigation():
             if target is None:
                 print "Naviagtion: Can't find a target"
                 return
-
+            # bfs a path from current postion to the movement target
             path = self.bfs(grid, self.to_grid_id(self._pos), self.to_grid_id(target))
-
-            # print path
 
             # format message using generated path
             path_msg = Path()
@@ -166,8 +153,8 @@ class Navigation():
 
             print poses
 
+            # marker out the movement target in rviz for easier debugging
             self.mark(target)
-            # self.mark_poses(path_msg.poses)
 
             print "Navigation: Path published."
             # publish the path to navigation
@@ -175,9 +162,6 @@ class Navigation():
 
     def get_target(self, m, seen, curr_idx):
         """Return a target point (in odom) from the seen map, assuming unseen cells are marked as -1."""
-
-        # if self._goal is not None:
-        #     return self._goal
 
         # goal is found, drive straight towards it
         if self._goal_yaw is not None:
@@ -217,8 +201,7 @@ class Navigation():
                 q = new_q
 
             frontiers = []
-            # find frontiers
-            # go towards the target
+            # # find frontiers
             q = [self.get_coords(curr_idx)]
             visited = set()
             visited.add(curr_idx)
@@ -260,8 +243,7 @@ class Navigation():
                     fr = frontier
 
             print 'Max frontier: {}'.format(len(fr))
-            # # return the midpoint in the selected frontier (not quite)
-            # return self.map_coords_to_odom(fr[int(len(fr) * random())])
+            # return the midpoint in the selected frontier (not quite)
             return self.map_coords_to_odom(fr[len(fr) / 2])
         else:
             # search for target if it's been found, otherwise the closest unseen cell
@@ -294,6 +276,7 @@ class Navigation():
             return None
 
     def explore_frontier(self, x, y, visited, reachable, seen):
+        """A bfs from the specified grid to outline the frontier."""
         access_seen = lambda i, j: seen[self.get_id(i, j)]
         frontier = [(x, y)]
         q = [(x, y)]
@@ -330,15 +313,8 @@ class Navigation():
             q = new_q
         return frontier
 
-
-
-
-
-
-
-
-
     def expand(self, m):
+        """Essentially a bfs that 'blur' the map using the preset threshold. """
         res = list(m)
         access = lambda i, j: res[self.get_id(i, j)]
         walls = list(filter(lambda idx: res[idx] >= OBSTACLE_THRESHOLD_PROBABILITY, range(len(res))))
@@ -360,8 +336,6 @@ class Navigation():
 
     def bfs(self, m, curr_idx, tar_idx):
         """Return a path from current point to target point."""
-        # Change free cells within minimum distance from walls to walls.
-
         access = lambda i, j: m[self.get_id(i, j)]
 
         # find a path from curr -> tar
@@ -413,6 +387,7 @@ class Navigation():
         return path
 
     def to_occupancy_grid(self, m):
+        """Format a 1D array of map data into a occupancy grid message."""
         grid_msg = OccupancyGrid()
         grid_msg.header.frame_id = FRAME_ID
         grid_msg.header.stamp = rospy.Time.now()
@@ -421,21 +396,9 @@ class Navigation():
 
         return grid_msg
 
-    def mark_poses(self, poses):
-        # unmark previous markers first
-        for marker in self._marker_array.markers:
-            marker.action = Marker.DELETE
-        self._marker_array_pub.publish(self._marker_array)
-
-        marker_array = MarkerArray()
-
-        for pose in poses:
-            marker_array.markers.append(to_marker(pose))
-
-        self._marker_array = marker_array
-        self._marker_array_pub.publish(marker_array)
-
     def mark(self, target):
+        """Mark the given point using a marker in rviz."""
+
         marker_msg = Marker()
         # header
         marker_msg.header.frame_id = FRAME_ID
@@ -471,7 +434,6 @@ class Navigation():
         y = int(round(y / self._map_resolution))
         return x + y * self._map_width
 
-
     def spin(self):
         rate = rospy.Rate(FREQUENCY)
         while not rospy.is_shutdown():
@@ -486,7 +448,7 @@ def get_yaw(x, y, nx, ny):
     return math.copysign(math.acos(dx / math.sqrt(dx ** 2 + dy ** 2)), dy)
 
 def to_marker(pose):
-    """Mark a point in MAP reference frame with a certain type marker."""
+    """Wrap a pose in a marker message."""
     global marker_id
     marker_msg = Marker()
 
@@ -515,6 +477,7 @@ def to_marker(pose):
     return marker_msg
 
 def to_pose(pt, yaw):
+    """Wrap a pair point and yaw in a PoseStamped message."""
     global pose_seq
 
     pose = PoseStamped()
